@@ -39,14 +39,14 @@ body.private h1 { font-size: 16px; margin: 0; opacity: .7; }
 }
 #messages {
   display: flex;
-  flex-direction: column-reverse; /* newest at the bottom */
-  justify-content: flex-start;    /* keeps them pinned to bottom when not full */
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow-y: auto;
+  height: 100vh;
   gap: 6px;
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  height: 100vh; /* ensures the container fills screen/source height */
 }
 .msg {
   display: flex; gap: 10px; align-items: flex-start;

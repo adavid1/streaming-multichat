@@ -97,11 +97,10 @@ function renderMsg(m) {
 
   messages.appendChild(li)
 
-  // Auto-scroll
-  if (mode === 'private') {
-  const messages = document.getElementById('messages')
-    messages.scrollTop = 0 // because column-reverse puts "latest" at the visual bottom
-  }
+// Auto-scroll
+if (mode === 'private') {
+  messages.scrollTop = messages.scrollHeight
+}
 
   return li
 }
