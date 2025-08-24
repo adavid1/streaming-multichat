@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
+    "dev:test": "cross-env FAKE_MESSAGES=true nodemon src/index.js",
     "start": "node src/index.js",
     "overlay": "npx http-server ../overlay -p 5173 -c-1",
     "postinstall": "playwright install chromium"
@@ -20,6 +21,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "cross-env": "^10.0.0",
     "nodemon": "^3.1.10"
   }
 }

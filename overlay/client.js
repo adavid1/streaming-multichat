@@ -78,7 +78,7 @@ function renderMsg(m) {
   if (mode === 'private') {
     const plat = document.createElement('span')
     plat.className = 'platform'
-    plat.textContent = m.platform
+    plat.textContent = _capitalizeFirstLetter(m.platform)
     meta.appendChild(plat)
   }
 
@@ -106,3 +106,6 @@ function renderMsg(m) {
   return li
 }
 
+function _capitalizeFirstLetter(val) {
+  return String(val).charAt(0).toUpperCase() + String(val).slice(1)
+}

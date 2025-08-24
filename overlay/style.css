@@ -21,11 +21,15 @@ body.private {
 body.public {
   background: transparent;
 }
-header {
+body.public .controls,
+body.public h1 {
+  display: none;
+}
+body.private header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; gap: 12px;
 }
-h1 { font-size: 16px; margin: 0; opacity: .7; }
+body.private h1 { font-size: 16px; margin: 0; opacity: .7; }
 .controls { display: flex; align-items: center; gap: 12px; }
 #search {
   background: rgba(255,255,255,.1);
