@@ -1,0 +1,22 @@
+{
+  "name": "multichat-starter-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "overlay": "npx http-server ../overlay -p 5173 -c-1",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0",
+    "uuid": "^9.0.1",
+    "tmi.js": "^1.8.5",
+    "tiktok-live-connector": "^2.0.3",
+    "cors": "^2.8.5",
+    "playwright": "^1.45.0"
+  }
+}
