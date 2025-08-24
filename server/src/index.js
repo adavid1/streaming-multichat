@@ -9,6 +9,15 @@ import { startTwitch } from './adapters/twitch.js'
 import { startTikTok } from './adapters/tiktok.js'
 import { startYouTube } from './adapters/youtube.js'
 
+import path from "path"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const page = "../../overlay/index.html"
+const pageFullPath = path.resolve(__dirname, page)
+
 const PORT = parseInt(process.env.PORT || '8787', 10)
 const DEBUG = (process.env.DEBUG || 'false').toLowerCase() === 'true'
 
@@ -117,6 +126,8 @@ server.listen(PORT, () => {
   console.log(`Multichat WS server running on http://localhost:${PORT}`)
   console.log(`→ WebSocket endpoint: ws://localhost:${PORT}`)
   console.log('Add overlay/index.html to OBS as a Browser Source (file:// or served locally).')
+  console.log(`Public chat: ${pageFullPath}?mode=public`)
+  console.log(`Private chat: ${pageFullPath}?mode=private`)
 })
 
 process.on('SIGINT', async () => {
