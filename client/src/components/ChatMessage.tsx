@@ -34,7 +34,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     <div
       className={`
       flex items-start gap-2 rounded-2xl
-      px-3 backdrop-blur-sm
+      backdrop-blur-sm
       transition-opacity duration-300 ease-out
       ${isNew ? 'animate-fade-in' : ''}
       ${isExpiring ? 'opacity-0' : 'opacity-100'}
