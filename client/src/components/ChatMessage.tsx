@@ -38,7 +38,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     `}
     >
       {/* Timestamp */}
-      <span className="flex-shrink-0 text-xs leading-relaxed text-chat-muted">
+      <span className="flex-shrink-0 text-sm leading-relaxed text-chat-muted">
         {new Date(ts).toLocaleTimeString([], {
           hour12: false,
           hour: '2-digit',
@@ -48,7 +48,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
       {/* Header with username, badges, and platform */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="truncate text-sm font-semibold" style={{ color: color || undefined }}>
+        <span className="truncate text-base font-bold" style={{ color: color || undefined }}>
           {username}
         </span>
 
@@ -56,7 +56,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         {showPlatform && (
           <span
             className={`
-              rounded-full px-2 py-0.5 text-xs font-medium text-white
+              rounded-full px-2 py-0.5 text-sm font-medium text-white
               ${platformColors[platform]}
             `}
           >
@@ -68,7 +68,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         {showBadges && badges.length > 0 && (
           <div className="flex gap-1">
             {badges.map((badge, index) => (
-              <span key={index} className="rounded bg-gray-700 px-1.5 py-0.5 text-xs text-gray-300">
+              <span key={index} className="rounded bg-gray-700 px-1.5 py-0.5 text-sm text-gray-300">
                 {badge}
               </span>
             ))}
@@ -77,7 +77,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       </div>
 
       {/* Message text */}
-      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</div>
+      <div className="whitespace-pre-wrap break-words text-base leading-relaxed">{text}</div>
     </div>
   )
 }
