@@ -10,7 +10,7 @@ import { existsSync } from 'fs';
 
 import { startTwitch } from './adapters/twitch.js';
 import { startTikTok } from './adapters/tiktok.js';
-import { startYouTube } from './adapters/youtube.js';
+import { startYouTube } from './adapters/youtube';
 import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -182,13 +182,14 @@ async function initializeAdapters(): Promise<void> {
     if (DEBUG) console.log('[tiktok] skipped (missing env)');
   }
 
-  // YouTube (Playwright-based reader, no API quota)
-  if (process.env.YT_VIDEO_ID) {
+  // YouTube via youtube-chat (no official API key required)
+  if (process.env.YT_CHANNEL_ID) {
+    console.log('[youtube] starting with channel id:', process.env.YT_CHANNEL_ID);
     try {
       const stopYouTube = await startYouTube({
-        videoId: process.env.YT_VIDEO_ID,
+        channelId: process.env.YT_CHANNEL_ID,
         retryWhenOffline: (process.env.YT_RETRY_WHEN_OFFLINE || 'true').toLowerCase() === 'true',
-        onMessage(evt) {
+        onMessage(evt: AdapterEvent) {
           const normalized = normalize({ platform: 'youtube', ...evt });
           broadcast(normalized);
         },
@@ -199,7 +200,7 @@ async function initializeAdapters(): Promise<void> {
       console.error('[youtube] Failed to start:', (error as Error).message);
     }
   } else {
-    if (DEBUG) console.log('[youtube] skipped (missing env)');
+    console.warn('[youtube] skipped: set YT_CHANNEL_ID in your environment to enable YouTube');
   }
 
   // Fake messages for testing

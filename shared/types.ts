@@ -30,7 +30,7 @@ export interface TwitchConfig {
 }
 
 export interface YouTubeConfig {
-  videoId: string;
+  channelId: string; // UC... channel id for youtube-chat
   retryWhenOffline: boolean;
 }
 
