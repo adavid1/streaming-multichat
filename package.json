@@ -1,0 +1,19 @@
+{
+  "name": "multichat-starter-kit",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev:test": "cd server && npm run dev:test",
+    "build": "cd client && npm run build",
+    "preview": "cd client && npm run preview",
+    "server": "cd server && npm start",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
