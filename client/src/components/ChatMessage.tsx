@@ -4,6 +4,7 @@ import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 interface ChatMessageProps {
   message: ChatMessageType
   showPlatform?: boolean
+  showTimestamp?: boolean
   showBadges?: boolean
   isNew?: boolean
   isExpiring?: boolean
@@ -23,6 +24,7 @@ const platformLabels = {
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
+  showTimestamp = false,
   showPlatform = false,
   showBadges = false,
   isNew = false,
@@ -41,13 +43,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     `}
     >
       {/* Timestamp */}
-      <span className="flex-shrink-0 text-sm leading-relaxed text-chat-muted">
-        {new Date(ts).toLocaleTimeString([], {
-          hour12: false,
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
-      </span>
+      {showTimestamp && (
+        <span className="flex-shrink-0 text-sm leading-relaxed text-chat-muted">
+          {new Date(ts).toLocaleTimeString([], {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      )}
 
       {/* Header with username, badges, and platform */}
       <div className="flex flex-wrap items-center gap-2">

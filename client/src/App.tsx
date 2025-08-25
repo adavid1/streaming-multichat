@@ -148,6 +148,7 @@ const App: React.FC = () => {
               <ChatMessage
                 key={message.id}
                 message={message}
+                showTimestamp={!isPublicMode}
                 showPlatform={!isPublicMode}
                 showBadges={!isPublicMode}
                 isNew={index === filteredMessages.length - 1}
