@@ -17,7 +17,12 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false)
   const [isPublicMode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
-    return params.get('mode') === 'public'
+    const privateParam = params.get('private')
+    const isPrivateParam =
+      typeof privateParam === 'string' && ['1', 'true', 'yes'].includes(privateParam.toLowerCase())
+    const path = window.location.pathname.replace(/\/+$/, '')
+    const isPrivatePath = path === '/private'
+    return !(isPrivateParam || isPrivatePath)
   })
 
   const { connectionStatus, isConnected } = useWebSocket()
