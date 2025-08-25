@@ -5,9 +5,7 @@ import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
 interface ChatMessageProps {
   message: ChatMessageType
-  showPlatform?: boolean
-  showTimestamp?: boolean
-  showBadges?: boolean
+  isPublicMode?: boolean
   isNew?: boolean
   isExpiring?: boolean
 }
@@ -26,9 +24,7 @@ const platformIcons = {
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
-  showTimestamp = false,
-  showPlatform = false,
-  showBadges = false,
+  isPublicMode = true,
   isNew = false,
   isExpiring = false,
 }) => {
@@ -45,7 +41,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     `}
     >
       {/* Timestamp */}
-      {showTimestamp && (
+      {!isPublicMode && (
         <span className="flex-shrink-0 text-sm leading-relaxed text-chat-muted">
           {new Date(ts).toLocaleTimeString([], {
             hour12: false,
@@ -56,7 +52,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       )}
 
       {/* Platform indicator */}
-      {showPlatform && (
+      {!isPublicMode && (
         <span
           className={`
               inline-flex items-center justify-center rounded-full p-1 text-white
@@ -69,20 +65,106 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </span>
       )}
 
+      {/* Badges */}
+      {badges.length > 0 && (
+        <div className="flex gap-1">
+          {badges.map((badge, index) => {
+            const badgeLower = badge.toLowerCase()
+            const isTwitchModerator = platform === 'twitch' && badgeLower === 'moderator'
+            const isTwitchVIP = platform === 'twitch' && badgeLower === 'vip'
+            const isTwitchNoVideo = platform === 'twitch' && badgeLower === 'no_video'
+            const isTwitchNoAudio = platform === 'twitch' && badgeLower === 'no_audio'
+            const isTwitchPremium = platform === 'twitch' && badgeLower === 'premium'
+
+            if (isTwitchModerator) {
+              return (
+                <img
+                  key={index}
+                  src="https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1"
+                  alt="Moderator"
+                  title="Moderator"
+                  className="my-1 h-4 w-4"
+                />
+              )
+            }
+
+            if (isTwitchVIP) {
+              return (
+                <img
+                  key={index}
+                  src="https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/3"
+                  alt="VIP"
+                  title="VIP"
+                  className="my-1 h-4 w-4 object-cover"
+                />
+              )
+            }
+
+            if (isTwitchNoVideo) {
+              return (
+                <img
+                  key={index}
+                  src="https://assets.help.twitch.tv/article/img/659115-05.png"
+                  alt="No Video"
+                  title="No Video"
+                  className="my-1 h-4 w-4"
+                />
+              )
+            }
+
+            if (isTwitchNoAudio) {
+              return (
+                <img
+                  key={index}
+                  src="https://assets.help.twitch.tv/article/img/659115-04.png"
+                  alt="No Audio"
+                  title="No Audio"
+                  className="my-1 h-4 w-4"
+                />
+              )
+            }
+
+            if (isTwitchNoAudio) {
+              return (
+                <img
+                  key={index}
+                  src="https://assets.help.twitch.tv/article/img/659115-04.png"
+                  alt="No Audio"
+                  title="No Audio"
+                  className="my-1 h-4 w-4"
+                />
+              )
+            }
+
+            if (isTwitchPremium) {
+              return (
+                <img
+                  key={index}
+                  src="https://static-cdn.jtvnw.net/badges/v1/a1dd5073-19c3-4911-8cb4-c464a7bc1510/1"
+                  alt="Premium"
+                  title="Premium"
+                  className="my-1 h-4 w-4"
+                />
+              )
+            }
+
+            if (!isPublicMode) {
+              return (
+                <span
+                  key={index}
+                  className="rounded bg-gray-700 px-1.5 py-0.5 text-sm text-gray-300"
+                >
+                  {badge}
+                </span>
+              )
+            }
+          })}
+        </div>
+      )}
+
       <span className="truncate text-base font-bold" style={{ color: color || undefined }}>
         {username}
       </span>
-
-      {/* Badges */}
-      {showBadges && badges.length > 0 && (
-        <div className="flex gap-1">
-          {badges.map((badge, index) => (
-            <span key={index} className="rounded bg-gray-700 px-1.5 py-0.5 text-sm text-gray-300">
-              {badge}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Message text */}
       <div className="whitespace-pre-wrap break-words text-base leading-relaxed">{text}</div>

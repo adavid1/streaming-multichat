@@ -211,7 +211,7 @@ async function initializeAdapters(): Promise<void> {
         platform,
         username: "User" + Math.floor(Math.random() * 1000),
         message: "Hello world " + Math.floor(Math.random() * 100),
-        badges: Math.random() > 0.7 ? ["test"] : []
+        badges: Math.random() > 0.7 ? ["moderator","vip","no_video", "no_audio"] : []
       });
       broadcast(fakeMsg);
     }, 2000);

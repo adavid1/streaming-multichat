@@ -8,7 +8,8 @@ export async function startTwitch({
   onMessage, 
   debug = false 
 }: TwitchAdapterConfig): Promise<StopFunction> {
-  const normalizedChannel = channel.startsWith('#') ? channel : `#${channel}`;
+  // tmi.js expects channel names without a leading '#'
+  const normalizedChannel = channel.startsWith('#') ? channel.slice(1) : channel;
   const client = new tmi.Client({
     options: { debug },
     channels: [normalizedChannel]
@@ -39,7 +40,7 @@ export async function startTwitch({
   });
 
   await client.connect();
-  if (debug) console.log('[twitch] connected to channel:', normalizedChannel);
+  if (debug) console.log('[twitch] connected to channel:', `#${normalizedChannel}`);
 
   return async function stop(): Promise<void> {
     try {

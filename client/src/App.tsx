@@ -148,9 +148,7 @@ const App: React.FC = () => {
               <ChatMessage
                 key={message.id}
                 message={message}
-                showTimestamp={!isPublicMode}
-                showPlatform={!isPublicMode}
-                showBadges={!isPublicMode}
+                isPublicMode={isPublicMode}
                 isNew={index === filteredMessages.length - 1}
                 isExpiring={expiringIds.has(message.id)}
               />
