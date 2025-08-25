@@ -1,9 +1,9 @@
-import React from 'react';
-import { Wifi, WifiOff, Loader2, AlertTriangle } from 'lucide-react';
+import React from 'react'
+import { Wifi, WifiOff, Loader2, AlertTriangle } from 'lucide-react'
 
 interface ConnectionStatusProps {
-  status: 'connecting' | 'connected' | 'disconnected' | 'error';
-  isConnected: boolean;
+  status: 'connecting' | 'connected' | 'disconnected' | 'error'
+  isConnected: boolean
 }
 
 export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, isConnected }) => {
@@ -15,7 +15,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, isCo
           color: 'text-green-400',
           bgColor: 'bg-green-400/20',
           label: 'Connected',
-        };
+        }
       case 'connecting':
         return {
           icon: Loader2,
@@ -23,14 +23,14 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, isCo
           bgColor: 'bg-yellow-400/20',
           label: 'Connecting...',
           animate: true,
-        };
+        }
       case 'error':
         return {
           icon: AlertTriangle,
           color: 'text-red-400',
           bgColor: 'bg-red-400/20',
           label: 'Error',
-        };
+        }
       case 'disconnected':
       default:
         return {
@@ -38,25 +38,23 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, isCo
           color: 'text-gray-400',
           bgColor: 'bg-gray-400/20',
           label: 'Disconnected',
-        };
+        }
     }
-  };
+  }
 
-  const config = getStatusConfig();
-  const Icon = config.icon;
+  const config = getStatusConfig()
+  const Icon = config.icon
 
   return (
-    <div className={`
-      flex items-center gap-2 px-3 py-1.5 rounded-full text-sm
+    <div
+      className={`
+      flex items-center gap-2 rounded-full px-3 py-1.5 text-sm
       ${config.bgColor} ${config.color}
       transition-all duration-200
-    `}>
-      <Icon 
-        className={`w-4 h-4 ${config.animate ? 'animate-spin' : ''}`} 
-      />
-      <span className="font-medium hidden sm:inline">
-        {config.label}
-      </span>
+    `}
+    >
+      <Icon className={`h-4 w-4 ${config.animate ? 'animate-spin' : ''}`} />
+      <span className="hidden font-medium sm:inline">{config.label}</span>
     </div>
-  );
-};
+  )
+}
