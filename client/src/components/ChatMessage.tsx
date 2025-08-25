@@ -6,6 +6,7 @@ interface ChatMessageProps {
   showPlatform?: boolean
   showBadges?: boolean
   isNew?: boolean
+  isExpiring?: boolean
 }
 
 const platformColors = {
@@ -25,6 +26,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   showPlatform = false,
   showBadges = false,
   isNew = false,
+  isExpiring = false,
 }) => {
   const { username, message: text, badges, platform, color, ts } = message
 
@@ -33,8 +35,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       className={`
       flex items-start gap-2 rounded-2xl
       px-3 backdrop-blur-sm
-      transition-all duration-200 ease-out
+      transition-opacity duration-300 ease-out
       ${isNew ? 'animate-fade-in' : ''}
+      ${isExpiring ? 'opacity-0' : 'opacity-100'}
     `}
     >
       {/* Timestamp */}

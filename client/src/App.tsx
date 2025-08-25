@@ -15,13 +15,13 @@ const App: React.FC = () => {
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [isPublicMode, setIsPublicMode] = useState(() => {
+  const [isPublicMode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return params.get('mode') === 'public'
   })
 
   const { connectionStatus, isConnected } = useWebSocket()
-  const { messages, addMessage, clearMessages } = useChatMessages()
+  const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
 
   // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {
@@ -130,7 +130,7 @@ const App: React.FC = () => {
           className="flex h-full flex-col justify-end space-y-2 overflow-y-auto p-3"
           style={{ scrollBehavior: 'smooth' }}
         >
-          {filteredMessages.length === 0 ? (
+          {!isPublicMode && filteredMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-chat-muted">
               <div className="text-center">
                 <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
@@ -146,22 +146,12 @@ const App: React.FC = () => {
                 showPlatform={!isPublicMode}
                 showBadges={!isPublicMode}
                 isNew={index === filteredMessages.length - 1}
+                isExpiring={expiringIds.has(message.id)}
               />
             ))
           )}
         </div>
       </main>
-
-      {/* Debug info in development */}
-      {import.meta.env.DEV && (
-        <div className="fixed bottom-2 right-2 rounded bg-black bg-opacity-75 p-2 text-xs text-white">
-          <div>Mode: {isPublicMode ? 'Public' : 'Private'}</div>
-          <div>
-            Messages: {filteredMessages.length}/{messages.length}
-          </div>
-          <div>Connected: {isConnected ? 'Yes' : 'No'}</div>
-        </div>
-      )}
     </div>
   )
 }
