@@ -1,4 +1,6 @@
 import React from 'react'
+import { FaTwitch, FaYoutube } from 'react-icons/fa'
+import { SiTiktok } from 'react-icons/si'
 import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
 interface ChatMessageProps {
@@ -16,10 +18,10 @@ const platformColors = {
   tiktok: 'bg-pink-600',
 }
 
-const platformLabels = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  tiktok: 'TikTok',
+const platformIcons = {
+  twitch: <FaTwitch className="h-3.5 w-3.5" aria-hidden="true" />,
+  youtube: <FaYoutube className="h-3.5 w-3.5" aria-hidden="true" />,
+  tiktok: <SiTiktok className="h-3.5 w-3.5" aria-hidden="true" />,
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -53,35 +55,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </span>
       )}
 
-      {/* Header with username, badges, and platform */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="truncate text-base font-bold" style={{ color: color || undefined }}>
-          {username}
-        </span>
-
-        {/* Platform indicator */}
-        {showPlatform && (
-          <span
-            className={`
-              rounded-full px-2 py-0.5 text-sm font-medium text-white
+      {/* Platform indicator */}
+      {showPlatform && (
+        <span
+          className={`
+              inline-flex items-center justify-center rounded-full p-1 text-white
               ${platformColors[platform]}
             `}
-          >
-            {platformLabels[platform]}
-          </span>
-        )}
+          aria-label={platform}
+          title={platform}
+        >
+          {platformIcons[platform]}
+        </span>
+      )}
 
-        {/* Badges */}
-        {showBadges && badges.length > 0 && (
-          <div className="flex gap-1">
-            {badges.map((badge, index) => (
-              <span key={index} className="rounded bg-gray-700 px-1.5 py-0.5 text-sm text-gray-300">
-                {badge}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <span className="truncate text-base font-bold" style={{ color: color || undefined }}>
+        {username}
+      </span>
+
+      {/* Badges */}
+      {showBadges && badges.length > 0 && (
+        <div className="flex gap-1">
+          {badges.map((badge, index) => (
+            <span key={index} className="rounded bg-gray-700 px-1.5 py-0.5 text-sm text-gray-300">
+              {badge}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Message text */}
       <div className="whitespace-pre-wrap break-words text-base leading-relaxed">{text}</div>
