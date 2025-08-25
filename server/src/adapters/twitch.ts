@@ -4,19 +4,17 @@ import type { AdapterConfig, StopFunction, TwitchConfig } from '../../../shared/
 interface TwitchAdapterConfig extends AdapterConfig, TwitchConfig {}
 
 export async function startTwitch({ 
-  username, 
-  oauth, 
-  channels, 
+  channel,
   onMessage, 
   debug = false 
 }: TwitchAdapterConfig): Promise<StopFunction> {
+  const normalizedChannel = channel.startsWith('#') ? channel : `#${channel}`;
   const client = new tmi.Client({
     options: { debug },
-    identity: { username, password: oauth },
-    channels: channels.map(ch => ch.startsWith('#') ? ch : `#${ch}`)
+    channels: [normalizedChannel]
   });
 
-  client.on('message', (channel: string, tags: tmi.ChatUserstate, message: string, self: boolean) => {
+  client.on('message', (channel: string, tags: any, message: string, self: boolean) => {
     if (self) return;
     
     try {
@@ -41,7 +39,7 @@ export async function startTwitch({
   });
 
   await client.connect();
-  if (debug) console.log('[twitch] connected to channels:', channels);
+  if (debug) console.log('[twitch] connected to channel:', normalizedChannel);
 
   return async function stop(): Promise<void> {
     try {

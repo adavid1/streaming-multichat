@@ -112,11 +112,11 @@ module.exports = {
 ## 🔧 Configuration Updates
 
 ### Environment Variables
-No changes needed - same `.env` format:
+Updated `.env` format (Twitch simplified):
 ```env
 PORT=8787
 DEBUG=false
-TWITCH_USERNAME=...
+TWITCH_CHANNEL=your_twitch_channel
 # etc.
 ```
 

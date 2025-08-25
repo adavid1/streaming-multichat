@@ -143,12 +143,10 @@ const stopFns: StopFunction[] = [];
 
 async function initializeAdapters(): Promise<void> {
   // Twitch
-  if (process.env.TWITCH_USERNAME && process.env.TWITCH_OAUTH && process.env.TWITCH_CHANNELS) {
+  if (process.env.TWITCH_CHANNEL) {
     try {
       const stopTwitch = await startTwitch({
-        username: process.env.TWITCH_USERNAME,
-        oauth: process.env.TWITCH_OAUTH,
-        channels: process.env.TWITCH_CHANNELS.split(',').map(s => s.trim()).filter(Boolean),
+        channel: process.env.TWITCH_CHANNEL,
         onMessage(evt) {
           const normalized = normalize({ platform: 'twitch', ...evt });
           broadcast(normalized);
@@ -160,7 +158,7 @@ async function initializeAdapters(): Promise<void> {
       console.error('[twitch] Failed to start:', (error as Error).message);
     }
   } else {
-    if (DEBUG) console.log('[twitch] skipped (missing env)');
+    if (DEBUG) console.log('[twitch] skipped (missing TWITCH_CHANNEL env)');
   }
 
   // TikTok

@@ -86,12 +86,10 @@ PORT=8787
 DEBUG=false
 
 # Twitch (optional but recommended)
-TWITCH_USERNAME=your_twitch_username
-TWITCH_OAUTH=oauth:xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWITCH_CHANNELS=yourchannel,anotherchannel
+TWITCH_CHANNEL=yourchannel
 
 # YouTube Live Chat (no API key needed!)
-YT_VIDEO_ID=YOUR_YOUTUBE_LIVE_VIDEO_ID
+YT_CHANNEL_ID=YOUR_YOUTUBE_CHANNEL_ID  # e.g., UCxxxxxxxxxxxx
 YT_RETRY_WHEN_OFFLINE=true
 
 # TikTok

@@ -24,9 +24,7 @@ export interface WebSocketMessage {
 }
 
 export interface TwitchConfig {
-  username: string;
-  oauth: string;
-  channels: string[];
+  channel: string;
 }
 
 export interface YouTubeConfig {
