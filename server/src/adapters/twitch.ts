@@ -19,12 +19,22 @@ export async function startTwitch({
     if (self) return;
     
     try {
+      // Extract subscription months from badges
+      let subscriptionMonths: number | null = null;
+      if (tags.badges && tags.badges.subscriber) {
+        subscriptionMonths = parseInt(tags.badges.subscriber, 10);
+      }
+
       onMessage({
         username: tags['display-name'] || tags.username || 'unknown',
         message,
         badges: Object.keys(tags.badges || {}),
         color: tags.color || null,
-        raw: { channel, tags }
+        raw: { 
+          channel, 
+          tags,
+          subscriptionMonths // Include subscription months in raw data
+        }
       });
     } catch (error) {
       if (debug) console.error('[twitch] message processing error:', (error as Error).message);

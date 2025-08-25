@@ -11,7 +11,8 @@ import { existsSync } from 'fs';
 import { startTwitch } from './adapters/twitch.js';
 import { startTikTok } from './adapters/tiktok.js';
 import { startYouTube } from './adapters/youtube';
-import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage } from '../../shared/types.js';
+import { getTwitchBadgesPublic, extractSubscriptionBadges, addCustomChannelBadges } from './twitch-api.js';
+import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,6 +91,39 @@ const server = http.createServer(app);
 // WebSocket server
 const wss = new WebSocketServer({ server });
 
+// Global badge storage
+let twitchBadges: TwitchBadgeResponse | null = null;
+let subscriptionBadgeUrls: Record<string, string> = {};
+
+// Function to fetch Twitch badges
+async function fetchTwitchBadges(): Promise<void> {
+  if (!process.env.TWITCH_CHANNEL) {
+    console.log('[badges] No Twitch channel configured, skipping badge fetch');
+    return;
+  }
+
+  try {
+    console.log(`[badges] Fetching badges for channel: ${process.env.TWITCH_CHANNEL}`);
+    const badges = await getTwitchBadgesPublic(process.env.TWITCH_CHANNEL);
+    
+    if (badges) {
+      twitchBadges = badges;
+      subscriptionBadgeUrls = extractSubscriptionBadges(badges);
+      console.log(`[badges] Successfully loaded ${Object.keys(subscriptionBadgeUrls).length} subscription badge versions`);
+      
+      // Broadcast badges to all connected clients
+      broadcast({
+        type: 'badges',
+        data: badges
+      } as WebSocketMessage);
+    } else {
+      console.error('[badges] Failed to fetch Twitch badges');
+    }
+  } catch (error) {
+    console.error('[badges] Error fetching badges:', (error as Error).message);
+  }
+}
+
 function broadcast(msg: ChatMessage | WebSocketMessage): void {
   const data = JSON.stringify(msg);
   for (const client of wss.clients) {
@@ -132,6 +166,14 @@ wss.on('connection', (ws) => {
     type: 'connection', 
     message: 'Connected to multichat server' 
   } as WebSocketMessage));
+  
+  // Send current badges if available
+  if (twitchBadges) {
+    ws.send(JSON.stringify({
+      type: 'badges',
+      data: twitchBadges
+    } as WebSocketMessage));
+  }
   
   ws.on('close', () => {
     if (DEBUG) console.log('[ws] client disconnected');
@@ -220,6 +262,25 @@ async function initializeAdapters(): Promise<void> {
   }
 }
 
+// Example: Configure custom subscription badges for your channel
+// Uncomment and modify the following lines to use custom badges:
+/*
+if (process.env.TWITCH_CHANNEL) {
+  addCustomChannelBadges(process.env.TWITCH_CHANNEL, {
+    '1': 'https://your-domain.com/badges/1-month.png',
+    '3': 'https://your-domain.com/badges/3-months.png',
+    '6': 'https://your-domain.com/badges/6-months.png',
+    '9': 'https://your-domain.com/badges/9-months.png',
+    '12': 'https://your-domain.com/badges/12-months.png',
+    '18': 'https://your-domain.com/badges/18-months.png',
+    '24': 'https://your-domain.com/badges/24-months.png',
+    '36': 'https://your-domain.com/badges/36-months.png',
+    '48': 'https://your-domain.com/badges/48-months.png',
+    '60': 'https://your-domain.com/badges/60-months.png',
+  });
+}
+*/
+
 // Start server
 server.listen(PORT, async () => {
   console.log(`Multichat server running on http://localhost:${PORT}`);
@@ -233,6 +294,8 @@ server.listen(PORT, async () => {
     console.log('→ For OBS: http://localhost:' + PORT + '/?mode=public');
   }
   
+  // Fetch badges first, then start adapters
+  await fetchTwitchBadges();
   await initializeAdapters();
 });
 

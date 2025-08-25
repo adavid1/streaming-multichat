@@ -18,8 +18,8 @@ export interface PlatformFilters {
 }
 
 export interface WebSocketMessage {
-  type: 'chat' | 'connection' | 'error';
-  data?: ChatMessage;
+  type: 'chat' | 'connection' | 'error' | 'badges';
+  data?: ChatMessage | TwitchBadgeResponse;
   message?: string;
 }
 
@@ -50,3 +50,32 @@ export interface AdapterConfig {
 }
 
 export type StopFunction = () => Promise<void> | void;
+
+export interface TwitchBadge {
+  set_id: string;
+  versions: Array<{
+    id: string;
+    image_url_1x: string;
+    image_url_2x: string;
+    image_url_4x: string;
+  }>;
+}
+
+export interface TwitchBadges {
+  data: TwitchBadge[];
+}
+
+export interface TwitchBadgeResponse {
+  badge_sets: Record<string, {
+    versions: Record<string, {
+      image_url_1x: string;
+      image_url_2x: string;
+      image_url_4x: string;
+    }>;
+  }>;
+}
+
+export interface SubscriptionBadgeInfo {
+  months: number;
+  imageUrl: string;
+}

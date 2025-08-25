@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { ChatMessage, WebSocketMessage } from '../../../shared/types'
+import type { ChatMessage, WebSocketMessage, TwitchBadgeResponse } from '../../../shared/types'
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -7,6 +7,7 @@ interface UseWebSocketReturn {
   connectionStatus: ConnectionStatus
   isConnected: boolean
   lastMessage: ChatMessage | null
+  twitchBadges: TwitchBadgeResponse | null
   sendMessage: (message: any) => void
 }
 
@@ -16,6 +17,7 @@ export const useWebSocket = (
 ): UseWebSocketReturn => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null)
+  const [twitchBadges, setTwitchBadges] = useState<TwitchBadgeResponse | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectAttemptsRef = useRef(0)
@@ -56,6 +58,9 @@ export const useWebSocket = (
               onMessage?.(data.data)
             } else if (data.type === 'connection') {
               console.log('[WebSocket]', data.message)
+            } else if (data.type === 'badges' && data.data) {
+              console.log('[WebSocket] Received badge data')
+              setTwitchBadges(data.data as TwitchBadgeResponse)
             }
           } else {
             // Direct ChatMessage
@@ -140,6 +145,7 @@ export const useWebSocket = (
     connectionStatus,
     isConnected: connectionStatus === 'connected',
     lastMessage,
+    twitchBadges,
     sendMessage,
   }
 }

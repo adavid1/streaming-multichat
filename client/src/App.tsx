@@ -5,6 +5,7 @@ import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
+import { BadgeProvider } from './contexts/BadgeContext'
 import type { PlatformFilters } from '../../shared/types'
 
 const App: React.FC = () => {
@@ -25,7 +26,7 @@ const App: React.FC = () => {
     return !(isPrivateParam || isPrivatePath)
   })
 
-  const { connectionStatus, isConnected } = useWebSocket()
+  const { connectionStatus, isConnected, twitchBadges } = useWebSocket()
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
 
   // Filter messages based on filters and search query
@@ -68,95 +69,97 @@ const App: React.FC = () => {
   }, [isPublicMode])
 
   return (
-    <div
-      className={`min-h-screen ${isPublicMode ? 'bg-transparent' : 'bg-black'} font-sans text-chat-text`}
-    >
-      {/* Header - hidden in public mode */}
-      {!isPublicMode && (
-        <header className="flex items-center justify-between border-b border-gray-800 p-3">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            <h1 className="text-lg font-semibold">Multichat</h1>
-          </div>
+    <BadgeProvider twitchBadges={twitchBadges}>
+      <div
+        className={`min-h-screen ${isPublicMode ? 'bg-transparent' : 'bg-black'} font-sans text-chat-text`}
+      >
+        {/* Header - hidden in public mode */}
+        {!isPublicMode && (
+          <header className="flex items-center justify-between border-b border-gray-800 p-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              <h1 className="text-lg font-semibold">Multichat</h1>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <ConnectionStatus status={connectionStatus} isConnected={isConnected} />
-            <button
-              onClick={toggleSettings}
-              className="rounded-lg bg-gray-800 p-2 transition-colors hover:bg-gray-700"
-              aria-label="Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
-      )}
-
-      {/* Settings Panel */}
-      {showSettings && !isPublicMode && (
-        <div className="border-b border-gray-800 bg-gray-900 p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-chat-muted">Chat Filters</h2>
-            <button
-              onClick={toggleSettings}
-              className="rounded p-1 hover:bg-gray-800"
-              aria-label="Close settings"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <FilterControls
-            filters={filters}
-            searchQuery={searchQuery}
-            onFilterChange={handleFilterChange}
-            onSearchChange={handleSearchChange}
-          />
-
-          <div className="mt-4 border-t border-gray-800 pt-3">
-            <div className="flex items-center justify-between text-sm text-chat-muted">
-              <span>Total messages: {messages.length}</span>
+            <div className="flex items-center gap-3">
+              <ConnectionStatus status={connectionStatus} isConnected={isConnected} />
               <button
-                onClick={clearMessages}
-                className="rounded bg-red-600 px-2 py-1 text-xs text-white transition-colors hover:bg-red-700"
+                onClick={toggleSettings}
+                className="rounded-lg bg-gray-800 p-2 transition-colors hover:bg-gray-700"
+                aria-label="Settings"
               >
-                Clear All
+                <Settings className="h-4 w-4" />
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </header>
+        )}
 
-      {/* Chat Messages */}
-      <main
-        className={`flex-1 ${isPublicMode ? 'h-screen' : 'h-[calc(100vh-80px)]'} overflow-hidden`}
-      >
-        <div
-          className="flex h-full flex-col justify-end space-y-2 overflow-y-auto p-3"
-          style={{ scrollBehavior: 'smooth' }}
-        >
-          {!isPublicMode && filteredMessages.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-chat-muted">
-              <div className="text-center">
-                <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                <p>No messages yet...</p>
-                {!isConnected && <p className="mt-1 text-sm">Connecting to chat...</p>}
+        {/* Settings Panel */}
+        {showSettings && !isPublicMode && (
+          <div className="border-b border-gray-800 bg-gray-900 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-medium text-chat-muted">Chat Filters</h2>
+              <button
+                onClick={toggleSettings}
+                className="rounded p-1 hover:bg-gray-800"
+                aria-label="Close settings"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <FilterControls
+              filters={filters}
+              searchQuery={searchQuery}
+              onFilterChange={handleFilterChange}
+              onSearchChange={handleSearchChange}
+            />
+
+            <div className="mt-4 border-t border-gray-800 pt-3">
+              <div className="flex items-center justify-between text-sm text-chat-muted">
+                <span>Total messages: {messages.length}</span>
+                <button
+                  onClick={clearMessages}
+                  className="rounded bg-red-600 px-2 py-1 text-xs text-white transition-colors hover:bg-red-700"
+                >
+                  Clear All
+                </button>
               </div>
             </div>
-          ) : (
-            filteredMessages.map((message, index) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isPublicMode={isPublicMode}
-                isNew={index === filteredMessages.length - 1}
-                isExpiring={expiringIds.has(message.id)}
-              />
-            ))
-          )}
-        </div>
-      </main>
-    </div>
+          </div>
+        )}
+
+        {/* Chat Messages */}
+        <main
+          className={`flex-1 ${isPublicMode ? 'h-screen' : 'h-[calc(100vh-80px)]'} overflow-hidden`}
+        >
+          <div
+            className="flex h-full flex-col justify-end space-y-2 overflow-y-auto p-3"
+            style={{ scrollBehavior: 'smooth' }}
+          >
+            {!isPublicMode && filteredMessages.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-chat-muted">
+                <div className="text-center">
+                  <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                  <p>No messages yet...</p>
+                  {!isConnected && <p className="mt-1 text-sm">Connecting to chat...</p>}
+                </div>
+              </div>
+            ) : (
+              filteredMessages.map((message, index) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isPublicMode={isPublicMode}
+                  isNew={index === filteredMessages.length - 1}
+                  isExpiring={expiringIds.has(message.id)}
+                />
+              ))
+            )}
+          </div>
+        </main>
+      </div>
+    </BadgeProvider>
   )
 }
 

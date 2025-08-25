@@ -13,6 +13,7 @@ A modern multichat application built with **React**, **TypeScript**, and **Node.
 - 🔍 **Live filtering** by platform and search
 - 📱 **Responsive design** with Tailwind CSS
 - 🔄 **Auto-reconnection** and error handling
+- 🏷️ **Twitch subscription badges** with month-based display
 
 ## 🏗️ Architecture
 
@@ -177,6 +178,63 @@ const platformColors = {
   youtube: 'bg-red-600', 
   tiktok: 'bg-pink-600',
 };
+```
+
+### Twitch Subscription Badges
+The app automatically fetches Twitch subscription badges when connected to a channel and displays them based on the subscriber's months:
+
+- **Automatic fetching**: Badges are fetched on app startup using the public Twitch badges API
+- **Month-based display**: Shows the appropriate badge version based on subscription duration
+- **Fallback logic**: If exact month match isn't available, shows the closest available version
+- **No OAuth required**: Uses public API endpoints for badge fetching
+- **Custom badges support**: Can use custom subscription badges for specific channels
+
+#### Using Custom Subscription Badges
+
+You can configure custom subscription badges for your channel in two ways:
+
+**Method 1: Direct configuration in code**
+```javascript
+// In server/src/twitch-api.ts, add to CUSTOM_CHANNEL_BADGES object:
+const CUSTOM_CHANNEL_BADGES = {
+  'yourchannel': {
+    '1': 'https://your-domain.com/badges/1-month.png',
+    '3': 'https://your-domain.com/badges/3-months.png',
+    '6': 'https://your-domain.com/badges/6-months.png',
+    '9': 'https://your-domain.com/badges/9-months.png',
+    '12': 'https://your-domain.com/badges/12-months.png',
+    // ... add more months as needed
+  }
+};
+```
+
+**Method 2: Runtime configuration**
+```javascript
+import { addCustomChannelBadges } from './src/twitch-api.js';
+
+// Add custom badges for your channel
+addCustomChannelBadges('yourchannel', {
+  '1': 'https://your-domain.com/badges/1-month.png',
+  '3': 'https://your-domain.com/badges/3-months.png',
+  '6': 'https://your-domain.com/badges/6-months.png',
+  // ... add more months as needed
+});
+```
+
+**Badge Priority Order:**
+1. Custom channel badges (if configured)
+2. Channel-specific badges from Twitch API
+3. Global Twitch badges
+4. Fallback default badges
+
+#### Testing Badge Functionality
+
+```bash
+# Test default badge fetching
+npm run test:badges
+
+# Test custom badge functionality
+npm run test:custom-badges
 ```
 
 ### Message Filtering

@@ -1,6 +1,7 @@
 import React from 'react'
 import { FaTwitch, FaYoutube } from 'react-icons/fa'
 import { SiTiktok } from 'react-icons/si'
+import { useBadges } from '../contexts/BadgeContext'
 import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
 interface ChatMessageProps {
@@ -28,7 +29,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   isNew = false,
   isExpiring = false,
 }) => {
-  const { username, message: text, badges, platform, color, ts } = message
+  const { username, message: text, badges, platform, color, ts, raw } = message
+  const { getSubscriptionBadgeUrl } = useBadges()
+
+  // Extract subscription months from Twitch raw data
+  const getSubscriptionMonths = (): number | null => {
+    if (platform === 'twitch' && raw?.subscriptionMonths) {
+      return raw.subscriptionMonths
+    }
+    return null
+  }
+
+  const subscriptionMonths = getSubscriptionMonths()
 
   return (
     <div
@@ -75,6 +87,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             const isTwitchNoVideo = platform === 'twitch' && badgeLower === 'no_video'
             const isTwitchNoAudio = platform === 'twitch' && badgeLower === 'no_audio'
             const isTwitchPremium = platform === 'twitch' && badgeLower === 'premium'
+            const isTwitchSubscriber = platform === 'twitch' && badgeLower === 'subscriber'
 
             if (isTwitchModerator) {
               return (
@@ -124,18 +137,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               )
             }
 
-            if (isTwitchNoAudio) {
-              return (
-                <img
-                  key={index}
-                  src="https://assets.help.twitch.tv/article/img/659115-04.png"
-                  alt="No Audio"
-                  title="No Audio"
-                  className="my-1 h-4 w-4"
-                />
-              )
-            }
-
             if (isTwitchPremium) {
               return (
                 <img
@@ -148,6 +149,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               )
             }
 
+            // Handle subscription badges with months
+            if (isTwitchSubscriber && subscriptionMonths) {
+              const subscriptionBadgeUrl = getSubscriptionBadgeUrl(subscriptionMonths)
+              if (subscriptionBadgeUrl) {
+                return (
+                  <img
+                    key={index}
+                    src={subscriptionBadgeUrl}
+                    alt={`Subscriber ${subscriptionMonths} months`}
+                    title={`Subscriber ${subscriptionMonths} months`}
+                    className="my-1 h-4 w-4"
+                  />
+                )
+              }
+            }
+
             if (!isPublicMode) {
               return (
                 <span
@@ -158,6 +175,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 </span>
               )
             }
+
+            return null
           })}
         </div>
       )}
