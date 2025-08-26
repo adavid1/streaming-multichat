@@ -41,7 +41,6 @@ export const useWebSocket = (
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log('[WebSocket] Connected to server')
         setConnectionStatus('connected')
         reconnectAttemptsRef.current = 0
       }
@@ -57,9 +56,7 @@ export const useWebSocket = (
               setLastMessage(data.data)
               onMessage?.(data.data)
             } else if (data.type === 'connection') {
-              console.log('[WebSocket]', data.message)
             } else if (data.type === 'badges' && data.data) {
-              console.log('[WebSocket] Received badge data')
               setTwitchBadges(data.data as TwitchBadgeResponse)
             }
           } else {
@@ -73,16 +70,12 @@ export const useWebSocket = (
       }
 
       ws.onclose = (event) => {
-        console.log('[WebSocket] Connection closed:', event.code, event.reason)
         setConnectionStatus('disconnected')
         wsRef.current = null
 
         // Auto-reconnect with exponential backoff
         if (!event.wasClean && reconnectAttemptsRef.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000)
-          console.log(
-            `[WebSocket] Reconnecting in ${delay}ms... (attempt ${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`
-          )
 
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttemptsRef.current++
