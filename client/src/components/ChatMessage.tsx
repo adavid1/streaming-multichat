@@ -73,7 +73,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           src={emote.images.url_1x}
           alt={emote.name}
           title={emote.name}
-          className="inline-block h-7 w-auto object-contain align-middle"
+          className="inline-block size-6 object-contain align-middle"
         />
       )
     }
