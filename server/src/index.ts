@@ -28,6 +28,29 @@ app.use(cors());
 // Health check endpoint
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Badge endpoint for fetching channel-specific badges
+app.get('/api/badges/:channel', async (req, res) => {
+  try {
+    const { channel } = req.params;
+    
+    if (!channel) {
+      return res.status(400).json({ error: 'Channel parameter is required' });
+    }
+    
+    console.log(`[api] Fetching badges for channel: ${channel}`);
+    const badges = await getTwitchBadgesPublic(channel);
+    
+    if (!badges) {
+      return res.status(404).json({ error: 'Failed to fetch badges for channel' });
+    }
+    
+    res.json(badges);
+  } catch (error) {
+    console.error('[api] Error fetching badges:', (error as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // In development, don't serve static files (Vite handles this)
 // In production, serve the built React app
 if (!isDevelopment) {
@@ -97,14 +120,15 @@ let subscriptionBadgeUrls: Record<string, string> = {};
 
 // Function to fetch Twitch badges
 async function fetchTwitchBadges(): Promise<void> {
-  if (!process.env.TWITCH_CHANNEL) {
+  const twitchChannel = process.env.TWITCH_CHANNEL;
+  if (!twitchChannel) {
     console.log('[badges] No Twitch channel configured, skipping badge fetch');
     return;
   }
-
+  
   try {
-    console.log(`[badges] Fetching badges for channel: ${process.env.TWITCH_CHANNEL}`);
-    const badges = await getTwitchBadgesPublic(process.env.TWITCH_CHANNEL);
+    console.log(`[badges] Fetching badges for channel: ${twitchChannel}`);
+    const badges = await getTwitchBadgesPublic(twitchChannel);
     
     if (badges) {
       twitchBadges = badges;
@@ -185,10 +209,11 @@ const stopFns: StopFunction[] = [];
 
 async function initializeAdapters(): Promise<void> {
   // Twitch
-  if (process.env.TWITCH_CHANNEL) {
+  const twitchChannel = process.env.TWITCH_CHANNEL;
+  if (twitchChannel) {
     try {
       const stopTwitch = await startTwitch({
-        channel: process.env.TWITCH_CHANNEL,
+        channel: twitchChannel,
         onMessage(evt) {
           const normalized = normalize({ platform: 'twitch', ...evt });
           broadcast(normalized);
@@ -265,8 +290,9 @@ async function initializeAdapters(): Promise<void> {
 // Example: Configure custom subscription badges for your channel
 // Uncomment and modify the following lines to use custom badges:
 /*
-if (process.env.TWITCH_CHANNEL) {
-  addCustomChannelBadges(process.env.TWITCH_CHANNEL, {
+const twitchChannel = process.env.TWITCH_CHANNEL;
+if (twitchChannel) {
+  addCustomChannelBadges(twitchChannel, {
     '1': 'https://your-domain.com/badges/1-month.png',
     '3': 'https://your-domain.com/badges/3-months.png',
     '6': 'https://your-domain.com/badges/6-months.png',

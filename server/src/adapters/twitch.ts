@@ -19,20 +19,47 @@ export async function startTwitch({
     if (self) return;
     
     try {
-      // Extract subscription months from badges
+      // Extract subscription months from badges with multiple methods
       let subscriptionMonths: number | null = null;
+      
+      // Method 1: From tags.badges.subscriber (most reliable)
       if (tags.badges && tags.badges.subscriber) {
-        subscriptionMonths = parseInt(tags.badges.subscriber, 10);
+        const months = parseInt(tags.badges.subscriber, 10);
+        if (!isNaN(months)) {
+          subscriptionMonths = months;
+        }
       }
+      
+      // Method 2: From badge-info (newer TMI.js versions)
+      if (!subscriptionMonths && tags['badge-info'] && tags['badge-info'].subscriber) {
+        const months = parseInt(tags['badge-info'].subscriber, 10);
+        if (!isNaN(months)) {
+          subscriptionMonths = months;
+        }
+      }
+      
+      // Method 3: From subscriber tag (legacy)
+      if (!subscriptionMonths && tags.subscriber === '1' && !subscriptionMonths) {
+        // Default to 1 month if we know they're a subscriber but don't have months
+        subscriptionMonths = 1;
+      }
+
+      if (debug && subscriptionMonths) {
+        console.log(`[twitch] User ${tags['display-name']} has ${subscriptionMonths} month subscription badge`);
+      }
+
+      // Get all badge types
+      const badgeList = tags.badges ? Object.keys(tags.badges) : [];
 
       onMessage({
         username: tags['display-name'] || tags.username || 'unknown',
         message,
-        badges: Object.keys(tags.badges || {}),
+        badges: badgeList,
         color: tags.color || null,
         raw: { 
           channel, 
           tags,
+          badges: tags.badges, // Include raw badges object
           subscriptionMonths // Include subscription months in raw data
         }
       });
@@ -47,6 +74,14 @@ export async function startTwitch({
 
   client.on('disconnected', (reason: string) => {
     if (debug) console.log(`[twitch] disconnected: ${reason}`);
+  });
+
+  client.on('connecting', (address: string, port: number) => {
+    if (debug) console.log(`[twitch] connecting to ${address}:${port}`);
+  });
+
+  client.on('reconnect', () => {
+    if (debug) console.log(`[twitch] reconnecting...`);
   });
 
   await client.connect();

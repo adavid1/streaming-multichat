@@ -6,6 +6,7 @@ const default_subscription_badge = 'https://static-cdn.jtvnw.net/badges/v1/5d9f2
 
 // Fallback subscription badge URLs (common Twitch subscription badges)
 const FALLBACK_SUBSCRIPTION_BADGES: Record<string, string> = {
+  '0': 'https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1', // Default subscriber badge
   '1': 'https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1',
   '2': 'https://static-cdn.jtvnw.net/badges/v1/25a03e36-2bb2-4625-bd37-d6d9d406238d/1',
   '3': 'https://static-cdn.jtvnw.net/badges/v1/e8984705-d091-4e54-8241-e53b30a84b0e/1',
@@ -14,9 +15,14 @@ const FALLBACK_SUBSCRIPTION_BADGES: Record<string, string> = {
   '12': 'https://static-cdn.jtvnw.net/badges/v1/ed51a614-2c44-4a60-80b6-62908436b43a/1',
   '18': default_subscription_badge,
   '24': default_subscription_badge,
+  '30': default_subscription_badge,
   '36': default_subscription_badge,
+  '42': default_subscription_badge,
   '48': default_subscription_badge,
-  '60': default_subscription_badge
+  '54': default_subscription_badge,
+  '60': default_subscription_badge,
+  '66': default_subscription_badge,
+  '72': default_subscription_badge
 };
 
 // Manual configuration for custom subscription badges (can be extended)
@@ -29,168 +35,93 @@ const CUSTOM_CHANNEL_BADGES: Record<string, Record<string, string>> = {
   // }
 };
 
-export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadgeResponse | null> {
+// Cache for channel user IDs to avoid repeated lookups
+const channelIdCache = new Map<string, string>();
+
+/**
+ * Get broadcaster ID for a channel using Twitch Helix API with OAuth
+ */
+async function getBroadcasterIdFromHelix(channel: string): Promise<string | null> {
+  try {
+    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+    const oauthToken = process.env.TWITCH_OAUTH;
+    
+    if (!oauthToken) {
+      console.error('[twitch-api] TWITCH_OAUTH environment variable is required');
+      return null;
+    }
+    
+    const url = `https://api.twitch.tv/helix/users?login=${channel.toLowerCase()}`;
+    
+    console.log(`[twitch-api] Fetching broadcaster ID for ${channel}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.error(`[twitch-api] Failed to get broadcaster ID: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json() as any;
+    
+    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      console.error(`[twitch-api] No user found for channel: ${channel}`);
+      return null;
+    }
+
+    const broadcasterId = data.data[0].id;
+    channelIdCache.set(channel, broadcasterId);
+    console.log(`[twitch-api] Got broadcaster ID for ${channel}: ${broadcasterId}`);
+    
+    return broadcasterId;
+  } catch (error) {
+    console.error(`[twitch-api] Error getting broadcaster ID for ${channel}:`, (error as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Get broadcaster ID for a channel using TMI.js (fallback method)
+ */
+async function getBroadcasterIdFromTMI(channel: string): Promise<string | null> {
+  // Check cache first
+  if (channelIdCache.has(channel)) {
+    return channelIdCache.get(channel)!;
+  }
+
   return new Promise((resolve) => {
     const client = new tmi.Client({
       channels: [channel]
     });
 
     let resolved = false;
-
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         client.disconnect();
-        console.error(`[twitch-api] Timeout getting badges for channel: ${channel}`);
+        console.error(`[twitch-api] Timeout getting broadcaster ID for: ${channel}`);
         resolve(null);
       }
-    }, 10000); // 10 second timeout
+    }, 10000);
 
-    client.on('roomstate', async (channelName: string, state: any) => {
+    client.on('roomstate', (channelName: string, state: any) => {
       if (resolved) return;
       
       const userId = state['room-id'];
-      if (!userId) {
-        console.error(`[twitch-api] No room ID found for channel: ${channel}`);
+      if (userId) {
+        // Cache the result
+        channelIdCache.set(channel, userId);
+        console.log(`[twitch-api] Got broadcaster ID for ${channel}: ${userId}`);
         clearTimeout(timeout);
         resolved = true;
         client.disconnect();
-        resolve(null);
-        return;
-      }
-
-      try {
-        console.log(`[twitch-api] Getting badges for broadcaster ID: ${userId}`);
-        
-        // Check if we have manual custom badges for this channel
-        if (CUSTOM_CHANNEL_BADGES[channel]) {
-          console.log(`[twitch-api] Using manual custom badges for ${channel}`);
-          const customData: TwitchBadgeResponse = {
-            badge_sets: {
-              subscriber: {
-                versions: Object.entries(CUSTOM_CHANNEL_BADGES[channel]).reduce((acc, [months, url]) => {
-                  acc[months] = {
-                    image_url_1x: url,
-                    image_url_2x: url,
-                    image_url_4x: url
-                  };
-                  return acc;
-                }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
-              }
-            }
-          };
-          clearTimeout(timeout);
-          resolved = true;
-          client.disconnect();
-          resolve(customData);
-          return;
-        }
-        
-        // Try to get channel-specific badges first (these contain custom subscription badges)
-        try {
-          const channelBadgeUrl = `https://badges.twitch.tv/v1/badges/channels/${userId}/display`;
-          console.log(`[twitch-api] Fetching channel badges from: ${channelBadgeUrl}`);
-          
-          const channelResponse = await fetch(channelBadgeUrl, {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'application/json'
-            }
-          });
-          
-          if (channelResponse.ok) {
-            const channelData: TwitchBadgeResponse = await channelResponse.json();
-            console.log(`[twitch-api] Successfully fetched channel badges for ${channel}`);
-            
-            // Check if channel has custom subscription badges
-            if (channelData.badge_sets.subscriber) {
-              console.log(`[twitch-api] Channel has custom subscription badges`);
-              clearTimeout(timeout);
-              resolved = true;
-              client.disconnect();
-              resolve(channelData);
-              return;
-            }
-          }
-        } catch (channelError) {
-          console.log(`[twitch-api] Channel badges not available, trying global badges`);
-        }
-        
-        // If no channel-specific badges or no custom subscription badges, try global badges
-        try {
-          const globalBadgeUrl = 'https://badges.twitch.tv/v1/badges/global/display';
-          console.log(`[twitch-api] Fetching global badges from: ${globalBadgeUrl}`);
-          
-          const response = await fetch(globalBadgeUrl, {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const globalData: TwitchBadgeResponse = await response.json();
-            console.log(`[twitch-api] Successfully fetched global badges for ${channel}`);
-            clearTimeout(timeout);
-            resolved = true;
-            client.disconnect();
-            resolve(globalData);
-            return;
-          }
-        } catch (globalError) {
-          console.log(`[twitch-api] Global badges not available, using fallback`);
-        }
-        
-        // Use fallback badges when APIs are not accessible
-        console.error('[twitch-api] Both channel and global badge APIs failed, using fallback');
-        
-        const fallbackData: TwitchBadgeResponse = {
-          badge_sets: {
-            subscriber: {
-              versions: Object.entries(FALLBACK_SUBSCRIPTION_BADGES).reduce((acc, [months, url]) => {
-                acc[months] = {
-                  image_url_1x: url,
-                  image_url_2x: url,
-                  image_url_4x: url
-                };
-                return acc;
-              }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
-            }
-          }
-        };
-        
-        console.log(`[twitch-api] Using fallback subscription badges for ${channel}`);
-        clearTimeout(timeout);
-        resolved = true;
-        client.disconnect();
-        resolve(fallbackData);
-        
-      } catch (error: any) {
-        console.error('[twitch-api] Error getting badges from API, using fallback:', (error as Error).message);
-        
-        // Use fallback badges when API is not accessible
-        const fallbackData: TwitchBadgeResponse = {
-          badge_sets: {
-            subscriber: {
-              versions: Object.entries(FALLBACK_SUBSCRIPTION_BADGES).reduce((acc, [months, url]) => {
-                acc[months] = {
-                  image_url_1x: url,
-                  image_url_2x: url,
-                  image_url_4x: url
-                };
-                return acc;
-              }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
-            }
-          }
-        };
-        
-        console.log(`[twitch-api] Using fallback subscription badges for ${channel}`);
-        clearTimeout(timeout);
-        resolved = true;
-        client.disconnect();
-        resolve(fallbackData);
+        resolve(userId);
       }
     });
 
@@ -198,20 +129,264 @@ export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadg
       if (!resolved) {
         clearTimeout(timeout);
         resolved = true;
-        console.error(`[twitch-api] Disconnected before getting room state for: ${channel}`);
         resolve(null);
       }
     });
 
-    client.connect().catch((error: any) => {
+    client.connect().catch(() => {
       if (!resolved) {
         clearTimeout(timeout);
         resolved = true;
-        console.error(`[twitch-api] Failed to connect to get badges:`, (error as Error).message);
         resolve(null);
       }
     });
   });
+}
+
+/**
+ * Fetch channel badges using the modern Twitch Helix API with OAuth
+ */
+async function fetchChannelBadgesHelix(broadcasterId: string): Promise<TwitchBadgeResponse | null> {
+  try {
+    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+    const oauthToken = process.env.TWITCH_OAUTH;
+    
+    if (!oauthToken) {
+      console.error('[twitch-api] TWITCH_OAUTH environment variable is required for badge fetching');
+      return null;
+    }
+    
+    const url = `https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`;
+    
+    console.log(`[twitch-api] Fetching channel badges from Helix API: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.log(`[twitch-api] Helix API returned ${response.status}: ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json() as any;
+    
+    if (!data.data || !Array.isArray(data.data)) {
+      console.log('[twitch-api] Invalid response format from Helix API');
+      return null;
+    }
+
+    // Convert Helix format to our expected format
+    const badgeResponse: TwitchBadgeResponse = {
+      badge_sets: {}
+    };
+
+    for (const badge of data.data) {
+      if (!badge.set_id || !badge.versions) continue;
+      
+      const versions: Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }> = {};
+      
+      for (const version of badge.versions) {
+        if (!version.id) continue;
+        versions[version.id] = {
+          image_url_1x: version.image_url_1x || version.image_url_2x || version.image_url_4x,
+          image_url_2x: version.image_url_2x || version.image_url_1x || version.image_url_4x,
+          image_url_4x: version.image_url_4x || version.image_url_2x || version.image_url_1x
+        };
+      }
+      
+      badgeResponse.badge_sets[badge.set_id] = { versions };
+    }
+
+    console.log(`[twitch-api] Successfully parsed ${Object.keys(badgeResponse.badge_sets).length} badge sets from Helix`);
+    return badgeResponse;
+
+  } catch (error) {
+    console.error('[twitch-api] Error fetching from Helix API:', (error as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Fetch global badges using Helix API with OAuth
+ */
+async function fetchGlobalBadgesHelix(): Promise<TwitchBadgeResponse | null> {
+  try {
+    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+    const oauthToken = process.env.TWITCH_OAUTH;
+    
+    if (!oauthToken) {
+      console.error('[twitch-api] TWITCH_OAUTH environment variable is required for badge fetching');
+      return null;
+    }
+    
+    const url = 'https://api.twitch.tv/helix/chat/badges/global';
+    
+    console.log(`[twitch-api] Fetching global badges from Helix API`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.log(`[twitch-api] Global badges Helix API returned ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as any;
+    
+    if (!data.data || !Array.isArray(data.data)) {
+      return null;
+    }
+
+    // Convert to our format
+    const badgeResponse: TwitchBadgeResponse = {
+      badge_sets: {}
+    };
+
+    for (const badge of data.data) {
+      if (!badge.set_id || !badge.versions) continue;
+      
+      const versions: Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }> = {};
+      
+      for (const version of badge.versions) {
+        if (!version.id) continue;
+        versions[version.id] = {
+          image_url_1x: version.image_url_1x || version.image_url_2x || version.image_url_4x,
+          image_url_2x: version.image_url_2x || version.image_url_1x || version.image_url_4x,
+          image_url_4x: version.image_url_4x || version.image_url_2x || version.image_url_1x
+        };
+      }
+      
+      badgeResponse.badge_sets[badge.set_id] = { versions };
+    }
+
+    return badgeResponse;
+
+  } catch (error) {
+    console.error('[twitch-api] Error fetching global badges:', (error as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Main function to get Twitch badges for a channel
+ */
+export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadgeResponse | null> {
+  console.log(`[twitch-api] Getting badges for channel: ${channel}`);
+  
+  // Check if we have manual custom badges for this channel first
+  if (CUSTOM_CHANNEL_BADGES[channel.toLowerCase()]) {
+    console.log(`[twitch-api] Using manual custom badges for ${channel}`);
+    const customData: TwitchBadgeResponse = {
+      badge_sets: {
+        subscriber: {
+          versions: Object.entries(CUSTOM_CHANNEL_BADGES[channel.toLowerCase()]).reduce((acc, [months, url]) => {
+            acc[months] = {
+              image_url_1x: url,
+              image_url_2x: url,
+              image_url_4x: url
+            };
+            return acc;
+          }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
+        }
+      }
+    };
+    return customData;
+  }
+
+  try {
+    // Step 1: Get broadcaster ID using Helix API first, fallback to TMI
+    let broadcasterId = await getBroadcasterIdFromHelix(channel);
+    
+    if (!broadcasterId) {
+      console.log(`[twitch-api] Helix API failed, trying TMI fallback for ${channel}`);
+      broadcasterId = await getBroadcasterIdFromTMI(channel);
+    }
+    
+    if (!broadcasterId) {
+      console.error(`[twitch-api] Could not get broadcaster ID for ${channel}, using fallback`);
+      return createFallbackBadgeResponse();
+    }
+
+    // Step 2: Try to fetch channel-specific badges
+    let channelBadges = await fetchChannelBadgesHelix(broadcasterId);
+    
+    // Step 3: If channel badges failed or don't contain subscriber badges, try global + merge
+    if (!channelBadges || !channelBadges.badge_sets.subscriber) {
+      console.log(`[twitch-api] No channel subscriber badges found, fetching global badges`);
+      
+      const globalBadges = await fetchGlobalBadgesHelix();
+      
+      if (globalBadges) {
+        // Merge channel badges with global badges (channel takes priority)
+        const mergedBadges: TwitchBadgeResponse = {
+          badge_sets: { ...globalBadges.badge_sets }
+        };
+        
+        if (channelBadges) {
+          // Merge channel badges on top of global badges
+          Object.assign(mergedBadges.badge_sets, channelBadges.badge_sets);
+        }
+        
+        // If still no subscriber badges, add fallback
+        if (!mergedBadges.badge_sets.subscriber) {
+          mergedBadges.badge_sets.subscriber = createFallbackSubscriberBadgeSet();
+        }
+        
+        return mergedBadges;
+      }
+    }
+
+    // Step 4: If we got channel badges with subscriber data, return them
+    if (channelBadges && channelBadges.badge_sets.subscriber) {
+      console.log(`[twitch-api] Using channel-specific subscriber badges for ${channel}`);
+      return channelBadges;
+    }
+
+    // Step 5: Last resort - use fallback
+    console.log(`[twitch-api] All API methods failed, using fallback badges for ${channel}`);
+    return createFallbackBadgeResponse();
+
+  } catch (error) {
+    console.error(`[twitch-api] Error in getTwitchBadgesPublic for ${channel}:`, (error as Error).message);
+    return createFallbackBadgeResponse();
+  }
+}
+
+/**
+ * Create fallback badge response
+ */
+function createFallbackBadgeResponse(): TwitchBadgeResponse {
+  return {
+    badge_sets: {
+      subscriber: createFallbackSubscriberBadgeSet()
+    }
+  };
+}
+
+/**
+ * Create fallback subscriber badge set
+ */
+function createFallbackSubscriberBadgeSet() {
+  return {
+    versions: Object.entries(FALLBACK_SUBSCRIPTION_BADGES).reduce((acc, [months, url]) => {
+      acc[months] = {
+        image_url_1x: url,
+        image_url_2x: url,
+        image_url_4x: url
+      };
+      return acc;
+    }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
+  };
 }
 
 // Helper function to extract subscription badge URLs from the response
@@ -221,7 +396,7 @@ export function extractSubscriptionBadges(badgeData: TwitchBadgeResponse): Recor
   if (badgeData.badge_sets.subscriber) {
     const versions = badgeData.badge_sets.subscriber.versions;
     Object.keys(versions).forEach(version => {
-      // Version is typically the number of months (1, 3, 6, 9, 12, etc.)
+      // Version is typically the number of months (0, 1, 3, 6, 9, 12, etc.)
       subscriptionBadges[version] = versions[version].image_url_1x;
     });
   }
@@ -231,6 +406,6 @@ export function extractSubscriptionBadges(badgeData: TwitchBadgeResponse): Recor
 
 // Helper function to add custom badges for a channel
 export function addCustomChannelBadges(channel: string, badges: Record<string, string>): void {
-  CUSTOM_CHANNEL_BADGES[channel] = badges;
+  CUSTOM_CHANNEL_BADGES[channel.toLowerCase()] = badges;
   console.log(`[twitch-api] Added custom badges for channel: ${channel}`);
 }
