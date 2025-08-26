@@ -2,6 +2,7 @@ import React from 'react'
 import { FaTwitch, FaYoutube } from 'react-icons/fa'
 import { SiTiktok } from 'react-icons/si'
 import { useBadges } from '../contexts/BadgeContext'
+import { useEmotes } from '../contexts/EmoteContext'
 import { getBadgeUrl, getBadgeInfo } from '../utils/badgeUtils'
 import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
@@ -32,6 +33,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const { username, message: text, badges, platform, color, ts, raw } = message
   const { getSubscriptionBadgeUrl, getCheerBadgeUrl } = useBadges()
+  const { emotes } = useEmotes()
 
   // Extract subscription months from Twitch raw data with multiple fallback methods
   const getSubscriptionMonths = (): number | null => {
@@ -58,6 +60,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
 
   const subscriptionMonths = getSubscriptionMonths()
+
+  // Function to render a word as either an emote image or text
+  const renderWord = (word: string, index: number) => {
+    // Check if the word matches a Twitch global emote
+    const emote = emotes.get(word)
+
+    if (emote) {
+      return (
+        <img
+          key={index}
+          src={emote.images.url_1x}
+          alt={emote.name}
+          title={emote.name}
+          className="inline-block h-7 w-auto object-contain align-middle"
+        />
+      )
+    }
+
+    // Return as regular text if no emote match
+    return <span key={index}>{word}</span>
+  }
 
   return (
     <div
@@ -181,9 +204,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       </span>
 
       {/* Message text */}
-      {text.split(' ').map((word, index) => (
-        <span key={index}>{word}</span>
-      ))}
+      {text.split(' ').map((word, index) => renderWord(word, index))}
     </div>
   )
 }

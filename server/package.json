@@ -7,9 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "dev:test": "cross-env FAKE_MESSAGES=true tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc",
-    "test:badges": "tsx test-badges.js",
-    "test:custom-badges": "tsx test-custom-badges.js"
+    "build": "tsc"
   },
   "dependencies": {
     "cors": "^2.8.5",
