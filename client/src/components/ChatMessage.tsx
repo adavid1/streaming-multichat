@@ -62,7 +62,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   return (
     <div
       className={`
-    flex flex-wrap items-start gap-2 rounded-2xl
+    flex flex-wrap items-start gap-1 rounded-2xl
     transition-opacity duration-300 ease-out
     ${isNew ? 'animate-fade-in' : ''}
     ${isExpiring ? 'opacity-0' : 'opacity-100'}
@@ -181,7 +181,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       </span>
 
       {/* Message text */}
-      <span>{text}</span>
+      {text.split(' ').map((word, index) => (
+        <span key={index}>{word}</span>
+      ))}
     </div>
   )
 }
