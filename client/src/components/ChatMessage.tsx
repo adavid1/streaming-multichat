@@ -31,7 +31,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   isExpiring = false,
 }) => {
   const { username, message: text, badges, platform, color, ts, raw } = message
-  const { getSubscriptionBadgeUrl } = useBadges()
+  const { getSubscriptionBadgeUrl, getCheerBadgeUrl } = useBadges()
 
   // Extract subscription months from Twitch raw data with multiple fallback methods
   const getSubscriptionMonths = (): number | null => {
@@ -100,6 +100,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {badges.map((badge, index) => {
             const badgeLower = badge.toLowerCase()
             const isTwitchSubscriber = platform === 'twitch' && badgeLower === 'subscriber'
+            const isTwitchCheer =
+              platform === 'twitch' && (badgeLower === 'bits' || badgeLower.startsWith('cheer'))
 
             // Handle subscription badges with months (special case)
             if (isTwitchSubscriber) {
@@ -120,8 +122,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               }
             }
 
+            // Handle cheer/bits badges (special case - can be customized by streamers)
+            if (isTwitchCheer) {
+              // Extract bit amount from raw data or use default
+              const bits = raw?.cheerAmount || 1
+              const cheerBadgeUrl = getCheerBadgeUrl(bits)
+
+              if (cheerBadgeUrl) {
+                return (
+                  <img
+                    key={index}
+                    src={cheerBadgeUrl}
+                    alt={`Cheered ${bits} bits`}
+                    title={`Cheered ${bits} bits`}
+                    className="my-1 size-4 object-contain"
+                  />
+                )
+              }
+            }
+
             // Handle all other Twitch global badges dynamically
-            if (platform === 'twitch') {
+            // Exclude special cases: subscriber, bits/cheer badges
+            if (platform === 'twitch' && !isTwitchSubscriber && !isTwitchCheer) {
               const badgeUrl = getBadgeUrl(badgeLower)
               const badgeInfo = getBadgeInfo(badgeLower)
 
