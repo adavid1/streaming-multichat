@@ -35,24 +35,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { getSubscriptionBadgeUrl, getCheerBadgeUrl } = useBadges()
   const { emotes } = useEmotes()
 
-  // Extract subscription months from Twitch raw data with multiple fallback methods
+  // Extract subscription months from Twitch raw data
   const getSubscriptionMonths = (): number | null => {
     if (platform !== 'twitch') return null
 
-    // Method 1: From our processed subscriptionMonths field
-    if (raw?.subscriptionMonths) {
-      return raw.subscriptionMonths
-    }
-
-    // Method 2: From TMI tags.badges.subscriber
-    if (raw?.tags?.badges?.subscriber) {
-      const months = parseInt(raw.tags.badges.subscriber, 10)
-      if (!isNaN(months)) return months
-    }
-
-    // Method 3: From raw.badges.subscriber (if processed differently)
-    if (raw?.badges?.subscriber) {
-      const months = parseInt(raw.badges.subscriber, 10)
+    if (raw?.tags?.['badge-info']?.subscriber) {
+      const months = parseInt(raw.tags['badge-info'].subscriber, 10)
       if (!isNaN(months)) return months
     }
 
