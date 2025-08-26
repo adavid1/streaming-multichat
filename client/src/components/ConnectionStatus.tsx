@@ -3,10 +3,9 @@ import { Wifi, WifiOff, Loader2, AlertTriangle } from 'lucide-react'
 
 interface ConnectionStatusProps {
   status: 'connecting' | 'connected' | 'disconnected' | 'error'
-  isConnected: boolean
 }
 
-export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, isConnected }) => {
+export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status }) => {
   const getStatusConfig = () => {
     switch (status) {
       case 'connected':

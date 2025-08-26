@@ -8,7 +8,7 @@ interface UseWebSocketReturn {
   isConnected: boolean
   lastMessage: ChatMessage | null
   twitchBadges: TwitchBadgeResponse | null
-  sendMessage: (message: any) => void
+  sendMessage: (message: unknown) => void
 }
 
 export const useWebSocket = (
@@ -19,7 +19,7 @@ export const useWebSocket = (
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null)
   const [twitchBadges, setTwitchBadges] = useState<TwitchBadgeResponse | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const maxReconnectAttempts = 5
 
@@ -53,9 +53,11 @@ export const useWebSocket = (
           if ('type' in data) {
             // WebSocketMessage
             if (data.type === 'chat' && data.data) {
-              setLastMessage(data.data)
-              onMessage?.(data.data)
+              const chatMessage = data.data as ChatMessage
+              setLastMessage(chatMessage)
+              onMessage?.(chatMessage)
             } else if (data.type === 'connection') {
+              // Handle connection messages if needed
             } else if (data.type === 'badges' && data.data) {
               setTwitchBadges(data.data as TwitchBadgeResponse)
             }
@@ -108,7 +110,7 @@ export const useWebSocket = (
     setConnectionStatus('disconnected')
   }, [])
 
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message))
     } else {

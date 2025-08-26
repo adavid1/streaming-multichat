@@ -24,9 +24,6 @@ export const BadgeProvider: React.FC<BadgeProviderProps> = ({ children, twitchBa
     const versions = twitchBadges.badge_sets.bits.versions
     const bitsKey = bits.toString()
 
-    // Debug logging
-    const availableVersions = Object.keys(versions)
-
     // Try to find exact match first
     if (versions[bitsKey]) {
       return versions[bitsKey].image_url_1x
@@ -71,9 +68,6 @@ export const BadgeProvider: React.FC<BadgeProviderProps> = ({ children, twitchBa
 
     const versions = twitchBadges.badge_sets.subscriber.versions
     const monthKey = months.toString()
-
-    // Debug logging
-    const availableVersions = Object.keys(versions)
 
     // Try to find exact match first
     if (versions[monthKey]) {
