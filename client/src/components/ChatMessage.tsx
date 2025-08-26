@@ -2,6 +2,7 @@ import React from 'react'
 import { FaTwitch, FaYoutube } from 'react-icons/fa'
 import { SiTiktok } from 'react-icons/si'
 import { useBadges } from '../contexts/BadgeContext'
+import { getBadgeUrl, getBadgeInfo } from '../utils/badgeUtils'
 import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
 interface ChatMessageProps {
@@ -32,11 +33,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { username, message: text, badges, platform, color, ts, raw } = message
   const { getSubscriptionBadgeUrl } = useBadges()
 
-  // Extract subscription months from Twitch raw data
+  // Extract subscription months from Twitch raw data with multiple fallback methods
   const getSubscriptionMonths = (): number | null => {
-    if (platform === 'twitch' && raw?.subscriptionMonths) {
+    if (platform !== 'twitch') return null
+
+    // Method 1: From our processed subscriptionMonths field
+    if (raw?.subscriptionMonths) {
       return raw.subscriptionMonths
     }
+
+    // Method 2: From TMI tags.badges.subscriber
+    if (raw?.tags?.badges?.subscriber) {
+      const months = parseInt(raw.tags.badges.subscriber, 10)
+      if (!isNaN(months)) return months
+    }
+
+    // Method 3: From raw.badges.subscriber (if processed differently)
+    if (raw?.badges?.subscriber) {
+      const months = parseInt(raw.badges.subscriber, 10)
+      if (!isNaN(months)) return months
+    }
+
     return null
   }
 
@@ -45,7 +62,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   return (
     <div
       className={`
-      flex items-start gap-2 rounded-2xl
+      flex flex-wrap items-start gap-2 rounded-2xl
       backdrop-blur-sm
       transition-opacity duration-300 ease-out
       ${isNew ? 'animate-fade-in' : ''}
@@ -82,84 +99,40 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         <div className="flex gap-1">
           {badges.map((badge, index) => {
             const badgeLower = badge.toLowerCase()
-            const isTwitchModerator = platform === 'twitch' && badgeLower === 'moderator'
-            const isTwitchVIP = platform === 'twitch' && badgeLower === 'vip'
-            const isTwitchNoVideo = platform === 'twitch' && badgeLower === 'no_video'
-            const isTwitchNoAudio = platform === 'twitch' && badgeLower === 'no_audio'
-            const isTwitchPremium = platform === 'twitch' && badgeLower === 'premium'
             const isTwitchSubscriber = platform === 'twitch' && badgeLower === 'subscriber'
 
-            if (isTwitchModerator) {
-              return (
-                <img
-                  key={index}
-                  src="https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1"
-                  alt="Moderator"
-                  title="Moderator"
-                  className="my-1 h-4 w-4"
-                />
-              )
-            }
+            // Handle subscription badges with months (special case)
+            if (isTwitchSubscriber) {
+              // Try to get subscription months, fallback to 1 month if none found
+              const months = subscriptionMonths || 1
+              const subscriptionBadgeUrl = getSubscriptionBadgeUrl(months)
 
-            if (isTwitchVIP) {
-              return (
-                <img
-                  key={index}
-                  src="https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/3"
-                  alt="VIP"
-                  title="VIP"
-                  className="my-1 h-4 w-4 object-cover"
-                />
-              )
-            }
-
-            if (isTwitchNoVideo) {
-              return (
-                <img
-                  key={index}
-                  src="https://assets.help.twitch.tv/article/img/659115-05.png"
-                  alt="No Video"
-                  title="No Video"
-                  className="my-1 h-4 w-4"
-                />
-              )
-            }
-
-            if (isTwitchNoAudio) {
-              return (
-                <img
-                  key={index}
-                  src="https://assets.help.twitch.tv/article/img/659115-04.png"
-                  alt="No Audio"
-                  title="No Audio"
-                  className="my-1 h-4 w-4"
-                />
-              )
-            }
-
-            if (isTwitchPremium) {
-              return (
-                <img
-                  key={index}
-                  src="https://static-cdn.jtvnw.net/badges/v1/a1dd5073-19c3-4911-8cb4-c464a7bc1510/1"
-                  alt="Premium"
-                  title="Premium"
-                  className="my-1 h-4 w-4"
-                />
-              )
-            }
-
-            // Handle subscription badges with months
-            if (isTwitchSubscriber && subscriptionMonths) {
-              const subscriptionBadgeUrl = getSubscriptionBadgeUrl(subscriptionMonths)
               if (subscriptionBadgeUrl) {
                 return (
                   <img
                     key={index}
                     src={subscriptionBadgeUrl}
-                    alt={`Subscriber ${subscriptionMonths} months`}
-                    title={`Subscriber ${subscriptionMonths} months`}
-                    className="my-1 h-4 w-4"
+                    alt={`Subscriber ${months} months`}
+                    title={`Subscriber ${months} months`}
+                    className="my-1 size-4 object-contain"
+                  />
+                )
+              }
+            }
+
+            // Handle all other Twitch global badges dynamically
+            if (platform === 'twitch') {
+              const badgeUrl = getBadgeUrl(badgeLower)
+              const badgeInfo = getBadgeInfo(badgeLower)
+
+              if (badgeUrl) {
+                return (
+                  <img
+                    key={index}
+                    src={badgeUrl}
+                    alt={badgeInfo?.title || badge}
+                    title={badgeInfo?.title || badge}
+                    className="my-1 size-4 object-contain"
                   />
                 )
               }
@@ -186,7 +159,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       </span>
 
       {/* Message text */}
-      <div className="whitespace-pre-wrap break-words text-base leading-relaxed">{text}</div>
+      <span className="whitespace-pre-wrap break-words text-base">{text}</span>
     </div>
   )
 }
