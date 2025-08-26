@@ -62,16 +62,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   return (
     <div
       className={`
-      flex flex-wrap items-start gap-2 rounded-2xl
-      backdrop-blur-sm
-      transition-opacity duration-300 ease-out
-      ${isNew ? 'animate-fade-in' : ''}
-      ${isExpiring ? 'opacity-0' : 'opacity-100'}
-    `}
+    flex flex-wrap items-start gap-2 rounded-2xl
+    transition-opacity duration-300 ease-out
+    ${isNew ? 'animate-fade-in' : ''}
+    ${isExpiring ? 'opacity-0' : 'opacity-100'}
+  `}
     >
       {/* Timestamp */}
       {!isPublicMode && (
-        <span className="flex-shrink-0 text-sm leading-relaxed text-chat-muted">
+        <span className="text-sm leading-relaxed text-chat-muted">
           {new Date(ts).toLocaleTimeString([], {
             hour12: false,
             hour: '2-digit',
@@ -84,9 +83,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       {!isPublicMode && (
         <span
           className={`
-              inline-flex items-center justify-center rounded-full p-1 text-white
-              ${platformColors[platform]}
-            `}
+        inline-flex items-center justify-center rounded-full p-1 text-white
+        ${platformColors[platform]}
+      `}
           aria-label={platform}
           title={platform}
         >
@@ -176,12 +175,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </div>
       )}
 
-      <span className="truncate text-base font-bold" style={{ color: color || undefined }}>
+      {/* Username */}
+      <span className="font-bold" style={{ color: color || undefined }}>
         {username}
       </span>
 
       {/* Message text */}
-      <span className="whitespace-pre-wrap break-words text-base">{text}</span>
+      <span>{text}</span>
     </div>
   )
 }
