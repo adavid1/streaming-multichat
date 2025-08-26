@@ -13,7 +13,9 @@ A modern multichat application built with **React**, **TypeScript**, and **Node.
 - 🔍 **Live filtering** by platform and search
 - 📱 **Responsive design** with Tailwind CSS
 - 🔄 **Auto-reconnection** and error handling
-- 🏷️ **Twitch subscription badges** with month-based display
+- 🏷️ **Advanced Twitch badges** with subscription months, cheer bits, and global badges
+- 😀 **Twitch global emotes** with automatic text replacement
+- 🎨 **Smart badge handling** with fallback logic and custom badge support
 
 ## 🏗️ Architecture
 
@@ -22,9 +24,13 @@ multichat-starter-kit/
 ├── client/                 # React + TypeScript frontend
 │   ├── src/
 │   │   ├── components/     # React components
+│   │   ├── contexts/       # React contexts (Badge, Emote)
 │   │   ├── hooks/         # Custom React hooks
+│   │   ├── utils/         # Utility functions
 │   │   ├── App.tsx        # Main application
 │   │   └── main.tsx       # Entry point
+│   ├── twitchGlobalBadges.json   # Twitch global badges data
+│   ├── twitchGlobalEmotes.json   # Twitch global emotes data
 │   ├── package.json
 │   ├── vite.config.ts     # Vite configuration
 │   └── tailwind.config.js # Tailwind CSS config
@@ -155,14 +161,23 @@ interface ChatMessage {
 
 ### Custom Hooks
 
-- `useWebSocket()` - WebSocket connection management
-- `useChatMessages()` - Chat message state management
+- `useWebSocket()` - WebSocket connection management with badge fetching
+- `useChatMessages()` - Chat message state management with auto-expiration
+- `useBadges()` - Twitch badge context for subscription and cheer badges
+- `useEmotes()` - Twitch emote context for global emote replacement
 
 ### Components
 
-- `<ChatMessage>` - Individual message display
+- `<ChatMessage>` - Individual message display with emote and badge rendering
 - `<FilterControls>` - Platform and search filters
 - `<ConnectionStatus>` - WebSocket connection indicator
+- `<BadgeProvider>` - Context provider for Twitch badge management
+- `<EmoteProvider>` - Context provider for Twitch emote management
+
+### Contexts
+
+- `BadgeContext` - Manages Twitch subscription and cheer badges with smart fallback logic
+- `EmoteContext` - Loads and provides Twitch global emotes for text replacement
 
 ## 🎨 Customization
 
@@ -180,61 +195,52 @@ const platformColors = {
 };
 ```
 
-### Twitch Subscription Badges
-The app automatically fetches Twitch subscription badges when connected to a channel and displays them based on the subscriber's months:
+### Twitch Badge System
+The app features a comprehensive Twitch badge system with advanced functionality:
 
-- **Automatic fetching**: Badges are fetched on app startup using the public Twitch badges API
-- **Month-based display**: Shows the appropriate badge version based on subscription duration
-- **Fallback logic**: If exact month match isn't available, shows the closest available version
+**Badge Types Supported:**
+- **Subscription badges**: Month-based display with smart fallback logic
+- **Cheer/Bits badges**: Displays appropriate badge based on bit amount
+- **Global badges**: Moderator, VIP, Premium, Staff, Admin, Global Mod, etc.
+- **Custom channel badges**: Support for streamer-specific badges
+
+**Key Features:**
+- **Automatic fetching**: Badges are fetched on app startup using public Twitch badges API
+- **Smart fallback logic**: Shows closest available version when exact match isn't found
 - **No OAuth required**: Uses public API endpoints for badge fetching
-- **Custom badges support**: Can use custom subscription badges for specific channels
+- **Badge utilities**: Helper functions for badge URL and info retrieval
+- **Context-based management**: Centralized badge handling through React context
 
-#### Using Custom Subscription Badges
+### Twitch Emote System
+The app includes comprehensive Twitch global emote support:
 
-You can configure custom subscription badges for your channel in two ways:
+**Features:**
+- **Global emote replacement**: Automatically replaces text with emote images (e.g., "PogChamp", "EleGiggle")
+- **Fast lookup**: Uses Map data structure for efficient emote name matching
+- **Automatic loading**: Loads emotes from `twitchGlobalEmotes.json` on app startup
+- **Inline rendering**: Emotes appear inline with chat messages
+- **Proper styling**: Emotes are sized and aligned correctly within messages
 
-**Method 1: Direct configuration in code**
-```javascript
-// In server/src/twitch-api.ts, add to CUSTOM_CHANNEL_BADGES object:
-const CUSTOM_CHANNEL_BADGES = {
-  'yourchannel': {
-    '1': 'https://your-domain.com/badges/1-month.png',
-    '3': 'https://your-domain.com/badges/3-months.png',
-    '6': 'https://your-domain.com/badges/6-months.png',
-    '9': 'https://your-domain.com/badges/9-months.png',
-    '12': 'https://your-domain.com/badges/12-months.png',
-    // ... add more months as needed
+**How it works:**
+1. Emotes are loaded from the JSON file containing Twitch's global emote data
+2. Chat messages are parsed word by word
+3. Words matching emote names are replaced with `<img>` elements
+4. Non-matching words remain as text
+
+**Emote Data Structure:**
+```typescript
+interface TwitchEmote {
+  id: string
+  name: string
+  images: {
+    url_1x: string
+    url_2x: string
+    url_4x: string
   }
-};
-```
-
-**Method 2: Runtime configuration**
-```javascript
-import { addCustomChannelBadges } from './src/twitch-api.js';
-
-// Add custom badges for your channel
-addCustomChannelBadges('yourchannel', {
-  '1': 'https://your-domain.com/badges/1-month.png',
-  '3': 'https://your-domain.com/badges/3-months.png',
-  '6': 'https://your-domain.com/badges/6-months.png',
-  // ... add more months as needed
-});
-```
-
-**Badge Priority Order:**
-1. Custom channel badges (if configured)
-2. Channel-specific badges from Twitch API
-3. Global Twitch badges
-4. Fallback default badges
-
-#### Testing Badge Functionality
-
-```bash
-# Test default badge fetching
-npm run test:badges
-
-# Test custom badge functionality
-npm run test:custom-badges
+  format: string[]
+  scale: string[]
+  theme_mode: string[]
+}
 ```
 
 ### Message Filtering
@@ -310,17 +316,60 @@ npx playwright install chromium
 4. Push to branch: `git push origin feature-name`
 5. Submit pull request
 
+## 🔧 Technical Stack
+
+### Frontend Dependencies
+- **React 18.2** - Modern React with hooks and concurrent features
+- **TypeScript 5.2** - Type safety and better developer experience
+- **Vite 5.0** - Fast build tool and dev server
+- **Tailwind CSS 3.3** - Utility-first CSS framework
+- **Lucide React** - Modern icon library
+- **React Icons** - Popular icon sets (Font Awesome, etc.)
+
+### Backend Dependencies
+- **Express 4.19** - Web server framework
+- **WebSocket (ws) 8.18** - Real-time communication
+- **tmi.js 1.8** - Twitch chat IRC client
+- **youtube-chat 2.2** - YouTube live chat scraping
+- **tiktok-live-connector 2.0** - TikTok live chat integration
+- **TypeScript 5.3** - Server-side type safety
+
+### Development Tools
+- **ESLint** - Code linting with TypeScript support
+- **Prettier** - Code formatting
+- **tsx** - TypeScript execution for development
+- **cross-env** - Cross-platform environment variables
+
+## 🚀 Recent Updates (v2.0)
+
+### New Features
+- ✨ **Twitch Global Emotes**: Automatic text-to-emote replacement in chat messages
+- 🏷️ **Advanced Badge System**: Support for subscription, cheer, and global badges
+- 🎯 **Smart Badge Fallback**: Intelligent badge version selection
+- 🔄 **Context Architecture**: Centralized state management for badges and emotes
+- 🛠️ **Utility Functions**: Helper functions for badge and emote handling
+- 📱 **Enhanced UI**: Improved message rendering with proper emote alignment
+
+### Technical Improvements
+- 🏗️ **Better Architecture**: Separation of concerns with contexts and utilities
+- 🎨 **Enhanced Styling**: Better visual hierarchy and emote integration
+- 🔍 **Type Safety**: Comprehensive TypeScript interfaces for all features
+- ⚡ **Performance**: Optimized emote lookup with Map data structure
+- 🧪 **Code Quality**: Improved linting and formatting setup
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
-- [tmi.js](https://github.com/tmijs/tmi.js) for Twitch chat
+- [tmi.js](https://github.com/tmijs/tmi.js) for Twitch chat IRC integration
+- [youtube-chat](https://github.com/LinaTsukusu/youtube-chat) for YouTube live chat
 - [tiktok-live-connector](https://github.com/isaackogan/TikTok-Live-Connector) for TikTok integration
-- [Playwright](https://playwright.dev/) for YouTube chat scraping
 - [React](https://react.dev/) and [TypeScript](https://www.typescriptlang.org/) for the frontend
 - [Tailwind CSS](https://tailwindcss.com/) for styling
+- [Vite](https://vitejs.dev/) for fast development and building
+- [Twitch API](https://dev.twitch.tv/) for badges and emotes data
 
 ---
 
