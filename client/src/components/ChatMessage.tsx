@@ -147,7 +147,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             // Handle cheer/bits badges (special case - can be customized by streamers)
             if (isTwitchCheer) {
               // Extract bit amount from raw data or use default
-              const bits = raw?.cheerAmount || 1
+              const bits = raw?.badges?.bits || 1
               const cheerBadgeUrl = getCheerBadgeUrl(bits)
 
               if (cheerBadgeUrl) {
