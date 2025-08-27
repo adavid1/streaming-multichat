@@ -28,6 +28,7 @@ export async function startYouTube({
   });
 
   chat.on('error', (err: any) => {
+    // Here error is 404 when the stream is offline
     console.error('[youtube] chat error:', err?.message || err);
   });
 
@@ -47,7 +48,7 @@ export async function startYouTube({
 
   try {
     const ok = await chat.start();
-    if (!ok) throw new Error('youtube-chat failed to start');
+    if (!ok) throw new Error('youtube-chat failed to start'); // Goes here when stream is offline
     console.log('[youtube] connected to channel:', channelId);
   } catch (error) {
     console.error('[youtube] Failed to start:', (error as Error).message);
