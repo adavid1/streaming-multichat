@@ -21,10 +21,10 @@ A modern multichat application built with **React**, **TypeScript**, and **Node.
 
 ```
 multichat-starter-kit/
-├── client/                 # React + TypeScript frontend
+├── client/                # React + TypeScript frontend
 │   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── contexts/       # React contexts (Badge, Emote)
+│   │   ├── components/    # React components
+│   │   ├── contexts/      # React contexts (Badge, Emote)
 │   │   ├── hooks/         # Custom React hooks
 │   │   ├── utils/         # Utility functions
 │   │   ├── App.tsx        # Main application
