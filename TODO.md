@@ -6,4 +6,5 @@
 * [v3] Ability to send messages to the chat (1 platform or all platforms at the same time)
 * [v4] Add Kick chat
 # Bugs
+* Remove the glbal connection status icon and replace it with the connection status of each platform
 ...
