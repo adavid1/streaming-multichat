@@ -13,7 +13,8 @@ interface UseWebSocketReturn {
 
 export const useWebSocket = (
   url?: string,
-  onMessage?: (message: ChatMessage) => void
+  onMessage?: (message: ChatMessage) => void,
+  onWebSocketMessage?: (message: WebSocketMessage) => void
 ): UseWebSocketReturn => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null)
@@ -52,19 +53,29 @@ export const useWebSocket = (
           // Handle different message types
           if ('type' in data) {
             // WebSocketMessage
-            if (data.type === 'chat' && data.data) {
-              const chatMessage = data.data as ChatMessage
+            const wsMessage = data as WebSocketMessage
+
+            // Call the WebSocket message callback first
+            onWebSocketMessage?.(wsMessage)
+
+            if (wsMessage.type === 'chat' && wsMessage.data) {
+              const chatMessage = wsMessage.data as ChatMessage
               setLastMessage(chatMessage)
               onMessage?.(chatMessage)
-            } else if (data.type === 'connection') {
+            } else if (wsMessage.type === 'connection') {
               // Handle connection messages if needed
-            } else if (data.type === 'badges' && data.data) {
-              setTwitchBadges(data.data as TwitchBadgeResponse)
+              console.log('[WebSocket] Connection message:', wsMessage.message)
+            } else if (wsMessage.type === 'badges' && wsMessage.data) {
+              setTwitchBadges(wsMessage.data as TwitchBadgeResponse)
+            } else if (wsMessage.type === 'youtube-status') {
+              // YouTube status is handled by the onWebSocketMessage callback
+              console.log('[WebSocket] YouTube status update:', wsMessage.data)
             }
           } else {
-            // Direct ChatMessage
-            setLastMessage(data as ChatMessage)
-            onMessage?.(data as ChatMessage)
+            // Direct ChatMessage (legacy support)
+            const chatMessage = data as ChatMessage
+            setLastMessage(chatMessage)
+            onMessage?.(chatMessage)
           }
         } catch (error) {
           console.error('[WebSocket] Failed to parse message:', error)
@@ -94,7 +105,7 @@ export const useWebSocket = (
       console.error('[WebSocket] Failed to create connection:', error)
       setConnectionStatus('error')
     }
-  }, [wsUrl, onMessage])
+  }, [wsUrl, onMessage, onWebSocketMessage])
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {

@@ -10,7 +10,7 @@ import { existsSync } from 'fs';
 
 import { startTwitch } from './adapters/twitch.js';
 import { startTikTok } from './adapters/tiktok.js';
-import { startYouTube } from './adapters/youtube';
+import { createYouTubeAdapter } from './adapters/youtube.js';
 import { getTwitchBadgesPublic, extractSubscriptionBadges, addCustomChannelBadges } from './twitch-api.js';
 import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse } from '../../shared/types.js';
 
@@ -47,6 +47,67 @@ app.get('/api/badges/:channel', async (req, res) => {
     res.json(badges);
   } catch (error) {
     console.error('[api] Error fetching badges:', (error as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// YouTube control endpoints
+app.post('/api/youtube/start', async (req, res) => {
+  try {
+    if (!youTubeAdapter) {
+      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+    }
+    
+    const success = await youTubeAdapter.start();
+    const status = youTubeAdapter.getStatus();
+    
+    // Broadcast status update to all clients
+    broadcast({
+      type: 'youtube-status',
+      data: { status, action: 'start', success }
+    } as WebSocketMessage);
+    
+    res.json({ success, status });
+  } catch (error) {
+    console.error('[api] Error starting YouTube:', (error as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/youtube/stop', async (req, res) => {
+  try {
+    if (!youTubeAdapter) {
+      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+    }
+    
+    await youTubeAdapter.stop();
+    const status = youTubeAdapter.getStatus();
+    
+    // Broadcast status update to all clients
+    broadcast({
+      type: 'youtube-status',
+      data: { status, action: 'stop' }
+    } as WebSocketMessage);
+    
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error('[api] Error stopping YouTube:', (error as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/youtube/status', (req, res) => {
+  try {
+    if (!youTubeAdapter) {
+      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+    }
+    
+    const status = youTubeAdapter.getStatus();
+    const isRunning = youTubeAdapter.isRunning();
+    
+    res.json({ status, isRunning });
+  } catch (error) {
+    console.error('[api] Error getting YouTube status:', (error as Error).message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -114,9 +175,10 @@ const server = http.createServer(app);
 // WebSocket server
 const wss = new WebSocketServer({ server });
 
-// Global badge storage
+// Global storage
 let twitchBadges: TwitchBadgeResponse | null = null;
 let subscriptionBadgeUrls: Record<string, string> = {};
+let youTubeAdapter: any = null; // YouTube adapter instance
 
 // Function to fetch Twitch badges
 async function fetchTwitchBadges(): Promise<void> {
@@ -199,6 +261,15 @@ wss.on('connection', (ws) => {
     } as WebSocketMessage));
   }
   
+  // Send YouTube status if adapter exists
+  if (youTubeAdapter) {
+    const status = youTubeAdapter.getStatus();
+    ws.send(JSON.stringify({
+      type: 'youtube-status',
+      data: { status, isRunning: youTubeAdapter.isRunning() }
+    } as WebSocketMessage));
+  }
+  
   ws.on('close', () => {
     if (DEBUG) console.log('[ws] client disconnected');
   });
@@ -247,22 +318,46 @@ async function initializeAdapters(): Promise<void> {
     if (DEBUG) console.log('[tiktok] skipped (missing env)');
   }
 
-  // YouTube via youtube-chat (no official API key required)
+  // YouTube - Initialize adapter but don't auto-start
   if (process.env.YT_CHANNEL_ID) {
-    console.log('[youtube] starting with channel id:', process.env.YT_CHANNEL_ID);
+    console.log('[youtube] Initializing adapter for channel id:', process.env.YT_CHANNEL_ID);
     try {
-      const stopYouTube = await startYouTube({
+      youTubeAdapter = await createYouTubeAdapter({
         channelId: process.env.YT_CHANNEL_ID,
         retryWhenOffline: (process.env.YT_RETRY_WHEN_OFFLINE || 'true').toLowerCase() === 'true',
         onMessage(evt: AdapterEvent) {
           const normalized = normalize({ platform: 'youtube', ...evt });
           broadcast(normalized);
         },
+        onStatusChange(status: string, message?: string) {
+          // Broadcast status changes to all connected clients
+          broadcast({
+            type: 'youtube-status',
+            data: { status, message }
+          } as WebSocketMessage);
+          
+          if (DEBUG) console.log(`[youtube] Status: ${status}${message ? ` - ${message}` : ''}`);
+        },
         debug: DEBUG
       });
-      stopFns.push(stopYouTube);
+
+      // Add the stop function to our collection
+      stopFns.push(() => youTubeAdapter?.stop());
+      
+      console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.');
+      
+      // Optionally auto-start if YT_AUTO_START is set
+      if (process.env.YT_AUTO_START?.toLowerCase() === 'true') {
+        console.log('[youtube] Auto-starting YouTube adapter...');
+        try {
+          await youTubeAdapter.start();
+        } catch (error) {
+          console.log('[youtube] Auto-start failed - manual start required');
+        }
+      }
+      
     } catch (error) {
-      console.error('[youtube] Failed to start:', (error as Error).message);
+      console.error('[youtube] Failed to initialize adapter:', (error as Error).message);
     }
   } else {
     console.warn('[youtube] skipped: set YT_CHANNEL_ID in your environment to enable YouTube');

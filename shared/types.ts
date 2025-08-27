@@ -17,9 +17,17 @@ export interface PlatformFilters {
   tiktok: boolean;
 }
 
+export interface YouTubeStatus {
+  status: 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying';
+  message?: string;
+  isRunning?: boolean;
+  action?: 'start' | 'stop';
+  success?: boolean;
+}
+
 export interface WebSocketMessage {
-  type: 'chat' | 'connection' | 'error' | 'badges';
-  data?: ChatMessage | TwitchBadgeResponse;
+  type: 'chat' | 'connection' | 'error' | 'badges' | 'youtube-status';
+  data?: ChatMessage | TwitchBadgeResponse | YouTubeStatus;
   message?: string;
 }
 
@@ -47,6 +55,13 @@ export interface AdapterEvent {
 export interface AdapterConfig {
   onMessage: (event: AdapterEvent) => void;
   debug?: boolean;
+}
+
+export interface YouTubeAdapterController {
+  start: () => Promise<boolean>;
+  stop: () => Promise<void>;
+  isRunning: () => boolean;
+  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying';
 }
 
 export type StopFunction = () => Promise<void> | void;

@@ -3,11 +3,13 @@ import { MessageSquare, Settings, X } from 'lucide-react'
 import { ChatMessage } from './components/ChatMessage'
 import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
+import { YouTubeControls } from './components/YouTubeControls'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
+import { useYouTubeControls } from './hooks/useYouTubeControls'
 import { BadgeProvider } from './contexts/BadgeContext'
 import { EmoteProvider } from './contexts/EmoteContext'
-import type { PlatformFilters } from '../../shared/types'
+import type { PlatformFilters, YouTubeStatus } from '../../shared/types'
 
 const App: React.FC = () => {
   const [filters, setFilters] = useState<PlatformFilters>({
@@ -17,18 +19,33 @@ const App: React.FC = () => {
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+  const [youtubeStatus, setYoutubeStatus] = useState<YouTubeStatus | null>(null)
   const [isPublicMode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
+    const modeParam = params.get('mode')
     const privateParam = params.get('private')
     const isPrivateParam =
       typeof privateParam === 'string' && ['1', 'true', 'yes'].includes(privateParam.toLowerCase())
     const path = window.location.pathname.replace(/\/+$/, '')
     const isPrivatePath = path === '/private'
-    return !(isPrivateParam || isPrivatePath)
+    const isPublicMode = modeParam === 'public'
+    return isPublicMode || !(isPrivateParam || isPrivatePath)
   })
 
-  const { connectionStatus, isConnected, twitchBadges } = useWebSocket()
+  const { connectionStatus, isConnected, twitchBadges, lastMessage } = useWebSocket(
+    undefined,
+    undefined,
+    (message) => {
+      // Handle YouTube status updates from WebSocket
+      if (message.type === 'youtube-status' && message.data) {
+        const statusData = message.data as YouTubeStatus
+        setYoutubeStatus(statusData)
+      }
+    }
+  )
+
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
+  const { startYouTube, stopYouTube, isLoading: youtubeLoading } = useYouTubeControls()
 
   // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {
@@ -60,6 +77,22 @@ const App: React.FC = () => {
   const toggleSettings = useCallback(() => {
     setShowSettings((prev) => !prev)
   }, [])
+
+  const handleYouTubeStart = useCallback(async () => {
+    try {
+      await startYouTube()
+    } catch (error) {
+      console.error('Failed to start YouTube:', error)
+    }
+  }, [startYouTube])
+
+  const handleYouTubeStop = useCallback(async () => {
+    try {
+      await stopYouTube()
+    } catch (error) {
+      console.error('Failed to stop YouTube:', error)
+    }
+  }, [stopYouTube])
 
   // Set up body classes for styling
   useEffect(() => {
@@ -100,7 +133,7 @@ const App: React.FC = () => {
           {showSettings && !isPublicMode && (
             <div className="border-b border-gray-800 bg-gray-900 p-4">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-medium text-chat-muted">Chat Filters</h2>
+                <h2 className="text-sm font-medium text-chat-muted">Chat Settings</h2>
                 <button
                   onClick={toggleSettings}
                   className="rounded p-1 hover:bg-gray-800"
@@ -110,14 +143,28 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              <FilterControls
-                filters={filters}
-                searchQuery={searchQuery}
-                onFilterChange={handleFilterChange}
-                onSearchChange={handleSearchChange}
-              />
+              {/* Chat Filters */}
+              <div className="mb-6">
+                <FilterControls
+                  filters={filters}
+                  searchQuery={searchQuery}
+                  onFilterChange={handleFilterChange}
+                  onSearchChange={handleSearchChange}
+                />
+              </div>
 
-              <div className="mt-4 border-t border-gray-800 pt-3">
+              {/* YouTube Controls */}
+              <div className="mb-6 border-t border-gray-800 pt-4">
+                <YouTubeControls
+                  status={youtubeStatus}
+                  onStart={handleYouTubeStart}
+                  onStop={handleYouTubeStop}
+                  disabled={youtubeLoading}
+                />
+              </div>
+
+              {/* Stats and Clear */}
+              <div className="border-t border-gray-800 pt-3">
                 <div className="flex items-center justify-between text-sm text-chat-muted">
                   <span>Total messages: {messages.length}</span>
                   <button
@@ -145,6 +192,11 @@ const App: React.FC = () => {
                     <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
                     <p>No messages yet...</p>
                     {!isConnected && <p className="mt-1 text-sm">Connecting to chat...</p>}
+                    {youtubeStatus?.status === 'stopped' && (
+                      <p className="mt-1 text-sm">
+                        YouTube monitoring is stopped - use settings to start
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (
