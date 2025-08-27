@@ -22,19 +22,37 @@ export const useWebSocket = (
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
+  const isConnectingRef = useRef(false)
   const maxReconnectAttempts = 5
 
   const wsUrl =
     url ||
-    (import.meta.env.DEV
+    (window.location.hostname === 'localhost'
       ? 'ws://localhost:8787' // dev: connect to server
       : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`)
 
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
+    isConnectingRef.current = false
+    setConnectionStatus('disconnected')
+  }, [])
+
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }
 
+    isConnectingRef.current = true
     setConnectionStatus('connecting')
 
     try {
@@ -42,6 +60,7 @@ export const useWebSocket = (
       wsRef.current = ws
 
       ws.onopen = () => {
+        isConnectingRef.current = false
         setConnectionStatus('connected')
         reconnectAttemptsRef.current = 0
       }
@@ -83,6 +102,7 @@ export const useWebSocket = (
       }
 
       ws.onclose = (event) => {
+        isConnectingRef.current = false
         setConnectionStatus('disconnected')
         wsRef.current = null
 
@@ -99,27 +119,15 @@ export const useWebSocket = (
 
       ws.onerror = (error) => {
         console.error('[WebSocket] Error:', error)
+        isConnectingRef.current = false
         setConnectionStatus('error')
       }
     } catch (error) {
       console.error('[WebSocket] Failed to create connection:', error)
+      isConnectingRef.current = false
       setConnectionStatus('error')
     }
   }, [wsUrl, onMessage, onWebSocketMessage])
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-
-    setConnectionStatus('disconnected')
-  }, [])
 
   const sendMessage = useCallback((message: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -129,14 +137,14 @@ export const useWebSocket = (
     }
   }, [])
 
-  // Connect on mount, disconnect on unmount
+  // Connect on mount, disconnect on unmount - use stable URL as dependency
   useEffect(() => {
     connect()
 
     return () => {
       disconnect()
     }
-  }, [connect, disconnect])
+  }, [wsUrl, connect, disconnect]) // Include all dependencies
 
   // Cleanup timeout on unmount
   useEffect(() => {
