@@ -49,7 +49,6 @@ multichat-starter-kit/
 
 ### Prerequisites
 - Node.js 18+ 
-- Chrome/Chromium (for Playwright)
 
 ### Installation
 
@@ -301,12 +300,6 @@ npm start
 - Username should be without @ symbol
 - Some regions have restrictions
 - Try different usernames if issues persist
-
-**Playwright issues:**
-```bash
-cd server
-npx playwright install chromium
-```
 
 ## 🤝 Contributing
 
