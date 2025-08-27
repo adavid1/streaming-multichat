@@ -5,7 +5,7 @@ A modern multichat application built with **React**, **TypeScript**, and **Node.
 ## ✨ Features
 
 - 🎮 **Twitch** chat via `tmi.js` (IRC real-time)
-- 📺 **YouTube** live chat via Playwright (no API quotas!)
+- 📺 **YouTube** live chat via youtube-chat
 - 🎵 **TikTok** live chat via `tiktok-live-connector`
 - ⚡ **Real-time WebSocket** communication
 - 🎨 **Modern React UI** with TypeScript
