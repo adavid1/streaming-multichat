@@ -32,20 +32,17 @@ const App: React.FC = () => {
     return isPublicMode || !(isPrivateParam || isPrivatePath)
   })
 
-  const { connectionStatus, isConnected, twitchBadges, lastMessage } = useWebSocket(
-    undefined,
-    undefined,
-    (message) => {
-      // Handle YouTube status updates from WebSocket
-      if (message.type === 'youtube-status' && message.data) {
-        const statusData = message.data as YouTubeStatus
-        setYoutubeStatus(statusData)
-      }
-    }
-  )
-
+  const { connectionStatus, isConnected, twitchBadges, lastWebSocketMessage } = useWebSocket()
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
   const { startYouTube, stopYouTube, isLoading: youtubeLoading } = useYouTubeControls()
+
+  // Handle YouTube status updates from WebSocket
+  useEffect(() => {
+    if (lastWebSocketMessage?.type === 'youtube-status' && lastWebSocketMessage.data) {
+      const statusData = lastWebSocketMessage.data as YouTubeStatus
+      setYoutubeStatus(statusData)
+    }
+  }, [lastWebSocketMessage])
 
   // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {
