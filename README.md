@@ -84,26 +84,7 @@ npm run server     # Starts production server
 
 ## ⚙️ Environment Variables
 
-Create `server/.env`:
-
-```env
-# General
-PORT=8787
-DEBUG=false
-
-# Twitch (optional but recommended)
-TWITCH_CHANNEL=yourchannel
-
-# YouTube Live Chat (no API key needed!)
-YT_CHANNEL_ID=YOUR_YOUTUBE_CHANNEL_ID  # e.g., UCxxxxxxxxxxxx
-YT_RETRY_WHEN_OFFLINE=true
-
-# TikTok
-TIKTOK_USERNAME=your_tiktok_username
-
-# Development
-FAKE_MESSAGES=false  # Set to true for testing
-```
+Create `server/.env` and fill it using the `.env.example` file as a template.
 
 ## 🎥 OBS Integration
 
@@ -226,133 +207,14 @@ The app includes comprehensive Twitch global emote support:
 3. Words matching emote names are replaced with `<img>` elements
 4. Non-matching words remain as text
 
-**Emote Data Structure:**
-```typescript
-interface TwitchEmote {
-  id: string
-  name: string
-  images: {
-    url_1x: string
-    url_2x: string
-    url_4x: string
-  }
-  format: string[]
-  scale: string[]
-  theme_mode: string[]
-}
-```
-
 ### Message Filtering
 - Real-time platform filtering (Twitch/YouTube/TikTok)
 - Live search by username or message content
 - Maximum 200 messages stored (configurable)
 
-## 🔍 Debugging
-
-**Client Debug Info:**
-- Available in development mode (bottom-right corner)
-- Shows connection status, message counts, and current mode
-
-**Server Logs:**
-```bash
-DEBUG=true npm run dev  # Enable verbose logging
-```
-
-**WebSocket Testing:**
-```javascript
-// Browser console
-const ws = new WebSocket('ws://localhost:8787');
-ws.onmessage = (event) => console.log(JSON.parse(event.data));
-```
-
-## 📦 Production Deployment
-
-1. **Build the application:**
-```bash
-npm run build
-```
-
-2. **Deploy server with built client:**
-```bash
-cd server
-npm start
-```
-
-3. **Environment considerations:**
-- Set `NODE_ENV=production`
-- Use process manager like PM2
-- Configure reverse proxy for WebSocket support
-- Consider rate limiting and security headers
-
-## 🐛 Troubleshooting
-
-**YouTube chat not working:**
-- Verify video ID is from an active live stream
-- Check if chat is enabled for the stream
-- Some streams have member-only or restricted chat
-
-**WebSocket connection issues:**
-- Check firewall settings
-- Ensure port 8787 is accessible
-- Verify no other services using the same port
-
-**TikTok connection problems:**
-- Username should be without @ symbol
-- Some regions have restrictions
-- Try different usernames if issues persist
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature-name`
-5. Submit pull request
-
-## 🔧 Technical Stack
-
-### Frontend Dependencies
-- **React 18.2** - Modern React with hooks and concurrent features
-- **TypeScript 5.2** - Type safety and better developer experience
-- **Vite 5.0** - Fast build tool and dev server
-- **Tailwind CSS 3.3** - Utility-first CSS framework
-- **Lucide React** - Modern icon library
-- **React Icons** - Popular icon sets (Font Awesome, etc.)
-
-### Backend Dependencies
-- **Express 4.19** - Web server framework
-- **WebSocket (ws) 8.18** - Real-time communication
-- **tmi.js 1.8** - Twitch chat IRC client
-- **youtube-chat 2.2** - YouTube live chat scraping
-- **tiktok-live-connector 2.0** - TikTok live chat integration
-- **TypeScript 5.3** - Server-side type safety
-
-### Development Tools
-- **ESLint** - Code linting with TypeScript support
-- **Prettier** - Code formatting
-- **tsx** - TypeScript execution for development
-- **cross-env** - Cross-platform environment variables
-
-## 🚀 Recent Updates (v2.0)
-
-### New Features
-- ✨ **Twitch Global Emotes**: Automatic text-to-emote replacement in chat messages
-- 🏷️ **Advanced Badge System**: Support for subscription, cheer, and global badges
-- 🎯 **Smart Badge Fallback**: Intelligent badge version selection
-- 🔄 **Context Architecture**: Centralized state management for badges and emotes
-- 🛠️ **Utility Functions**: Helper functions for badge and emote handling
-- 📱 **Enhanced UI**: Improved message rendering with proper emote alignment
-
-### Technical Improvements
-- 🏗️ **Better Architecture**: Separation of concerns with contexts and utilities
-- 🎨 **Enhanced Styling**: Better visual hierarchy and emote integration
-- 🔍 **Type Safety**: Comprehensive TypeScript interfaces for all features
-- ⚡ **Performance**: Optimized emote lookup with Map data structure
-- 🧪 **Code Quality**: Improved linting and formatting setup
-
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+MIT License.
 
 ## 🙏 Acknowledgments
 
