@@ -8,6 +8,4 @@
 * [v4] Ability to send messages to the chat (1 platform or all platforms at the same time)
 * [v5] Add Kick chat
 # Bugs
-* Remove the glbal connection status icon and replace it with the connection status of each platform
 * Fix Twitch sub gifter badges
-...
