@@ -4,6 +4,7 @@ import { ChatMessage } from './components/ChatMessage'
 import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { YouTubeControls } from './components/YouTubeControls'
+import { YouTubeConnectionStatus } from './components/YouTubeConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
 import { useYouTubeControls } from './hooks/useYouTubeControls'
@@ -115,6 +116,12 @@ const App: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <ConnectionStatus status={connectionStatus} isConnected={isConnected} />
+                <YouTubeConnectionStatus
+                  status={youtubeStatus}
+                  onStart={handleYouTubeStart}
+                  onStop={handleYouTubeStop}
+                  disabled={youtubeLoading}
+                />
                 <button
                   onClick={toggleSettings}
                   className="rounded-lg bg-gray-800 p-2 transition-colors hover:bg-gray-700"
@@ -191,7 +198,7 @@ const App: React.FC = () => {
                     {!isConnected && <p className="mt-1 text-sm">Connecting to chat...</p>}
                     {youtubeStatus?.status === 'stopped' && (
                       <p className="mt-1 text-sm">
-                        YouTube monitoring is stopped - use settings to start
+                        YouTube monitoring is stopped - click the YouTube icon to start
                       </p>
                     )}
                   </div>
