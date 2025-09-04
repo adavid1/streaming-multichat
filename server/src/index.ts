@@ -11,8 +11,8 @@ import { existsSync } from 'fs';
 import { startTwitch } from './adapters/twitch.js';
 import { startTikTok } from './adapters/tiktok.js';
 import { createYouTubeAdapter } from './adapters/youtube.js';
-import { getTwitchBadgesPublic, extractSubscriptionBadges, addCustomChannelBadges } from './twitch-api.js';
-import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse } from '../../shared/types.js';
+import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js';
+import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,6 +179,7 @@ const wss = new WebSocketServer({ server });
 let twitchBadges: TwitchBadgeResponse | null = null;
 let subscriptionBadgeUrls: Record<string, string> = {};
 let youTubeAdapter: any = null; // YouTube adapter instance
+let twitchStatus: TwitchStatus | null = null; // Twitch status
 
 // Function to fetch Twitch badges
 async function fetchTwitchBadges(): Promise<void> {
@@ -261,6 +262,14 @@ wss.on('connection', (ws) => {
     } as WebSocketMessage));
   }
   
+  // Send current Twitch status if available
+  if (twitchStatus) {
+    ws.send(JSON.stringify({
+      type: 'twitch-status',
+      data: twitchStatus
+    } as WebSocketMessage));
+  }
+  
   // Send YouTube status if adapter exists
   if (youTubeAdapter) {
     const status = youTubeAdapter.getStatus();
@@ -289,14 +298,44 @@ async function initializeAdapters(): Promise<void> {
           const normalized = normalize({ platform: 'twitch', ...evt });
           broadcast(normalized);
         },
+        onStatusChange(status: string, message?: string) {
+          // Update local status
+          twitchStatus = {
+            status: status as TwitchStatus['status'],
+            message,
+            channel: twitchChannel
+          };
+          
+          // Broadcast status changes to all connected clients
+          broadcast({
+            type: 'twitch-status',
+            data: twitchStatus
+          } as WebSocketMessage);
+          
+          if (DEBUG) console.log(`[twitch] Status: ${status}${message ? ` - ${message}` : ''}`);
+        },
         debug: DEBUG
       });
       stopFns.push(stopTwitch);
     } catch (error) {
       console.error('[twitch] Failed to start:', (error as Error).message);
+      // Set error status
+      twitchStatus = {
+        status: 'error',
+        message: (error as Error).message,
+        channel: twitchChannel
+      };
+      broadcast({
+        type: 'twitch-status',
+        data: twitchStatus
+      } as WebSocketMessage);
     }
   } else {
     if (DEBUG) console.log('[twitch] skipped (missing TWITCH_CHANNEL env)');
+    twitchStatus = {
+      status: 'stopped',
+      message: 'No Twitch channel configured'
+    };
   }
 
   // TikTok
@@ -381,26 +420,6 @@ async function initializeAdapters(): Promise<void> {
     stopFns.push(() => clearInterval(interval));
   }
 }
-
-// Example: Configure custom subscription badges for your channel
-// Uncomment and modify the following lines to use custom badges:
-/*
-const twitchChannel = process.env.TWITCH_CHANNEL;
-if (twitchChannel) {
-  addCustomChannelBadges(twitchChannel, {
-    '1': 'https://your-domain.com/badges/1-month.png',
-    '3': 'https://your-domain.com/badges/3-months.png',
-    '6': 'https://your-domain.com/badges/6-months.png',
-    '9': 'https://your-domain.com/badges/9-months.png',
-    '12': 'https://your-domain.com/badges/12-months.png',
-    '18': 'https://your-domain.com/badges/18-months.png',
-    '24': 'https://your-domain.com/badges/24-months.png',
-    '36': 'https://your-domain.com/badges/36-months.png',
-    '48': 'https://your-domain.com/badges/48-months.png',
-    '60': 'https://your-domain.com/badges/60-months.png',
-  });
-}
-*/
 
 // Start server
 server.listen(PORT, async () => {

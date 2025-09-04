@@ -5,12 +5,13 @@ import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { YouTubeControls } from './components/YouTubeControls'
 import { YouTubeConnectionStatus } from './components/YouTubeConnectionStatus'
+import { TwitchConnectionStatus } from './components/TwitchConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
 import { useYouTubeControls } from './hooks/useYouTubeControls'
 import { BadgeProvider } from './contexts/BadgeContext'
 import { EmoteProvider } from './contexts/EmoteContext'
-import type { PlatformFilters, YouTubeStatus } from '../../shared/types'
+import type { PlatformFilters, YouTubeStatus, TwitchStatus } from '../../shared/types'
 
 const App: React.FC = () => {
   const [filters, setFilters] = useState<PlatformFilters>({
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [youtubeStatus, setYoutubeStatus] = useState<YouTubeStatus | null>(null)
+  const [twitchStatus, setTwitchStatus] = useState<TwitchStatus | null>(null)
   const [isPublicMode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     const modeParam = params.get('mode')
@@ -37,11 +39,16 @@ const App: React.FC = () => {
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
   const { startYouTube, stopYouTube, isLoading: youtubeLoading } = useYouTubeControls()
 
-  // Handle YouTube status updates from WebSocket
+  // Handle YouTube and Twitch status updates from WebSocket
   useEffect(() => {
     if (lastWebSocketMessage?.type === 'youtube-status' && lastWebSocketMessage.data) {
       const statusData = lastWebSocketMessage.data as YouTubeStatus
       setYoutubeStatus(statusData)
+    }
+
+    if (lastWebSocketMessage?.type === 'twitch-status' && lastWebSocketMessage.data) {
+      const statusData = lastWebSocketMessage.data as TwitchStatus
+      setTwitchStatus(statusData)
     }
   }, [lastWebSocketMessage])
 
@@ -116,6 +123,7 @@ const App: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <ConnectionStatus status={connectionStatus} isConnected={isConnected} />
+                <TwitchConnectionStatus status={twitchStatus?.status || null} />
                 <YouTubeConnectionStatus
                   status={youtubeStatus}
                   onStart={handleYouTubeStart}

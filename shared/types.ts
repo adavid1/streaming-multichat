@@ -25,9 +25,15 @@ export interface YouTubeStatus {
   success?: boolean;
 }
 
+export interface TwitchStatus {
+  status: 'stopped' | 'connecting' | 'connected' | 'disconnected' | 'error';
+  message?: string;
+  channel?: string;
+}
+
 export interface WebSocketMessage {
-  type: 'chat' | 'connection' | 'error' | 'badges' | 'youtube-status';
-  data?: ChatMessage | TwitchBadgeResponse | YouTubeStatus;
+  type: 'chat' | 'connection' | 'error' | 'badges' | 'youtube-status' | 'twitch-status';
+  data?: ChatMessage | TwitchBadgeResponse | YouTubeStatus | TwitchStatus;
   message?: string;
 }
 
