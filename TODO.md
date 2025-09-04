@@ -9,3 +9,5 @@
 * [v5] Add Kick chat
 # Bugs
 * Fix Twitch sub gifter badges
+* [youtube] Chat error (39/15): Cannot read properties of undefined (reading '
+liveChatContinuation')
