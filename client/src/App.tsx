@@ -122,7 +122,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
-                <ConnectionStatus status={connectionStatus} isConnected={isConnected} />
+                <ConnectionStatus status={connectionStatus} />
                 <TwitchConnectionStatus status={twitchStatus?.status || null} />
                 <YouTubeConnectionStatus
                   status={youtubeStatus}
