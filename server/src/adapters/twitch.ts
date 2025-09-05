@@ -18,9 +18,6 @@ export async function startTwitch({
     channels: [normalizedChannel]
   });
 
-  // Notify connecting status
-  onStatusChange?.('connecting', `Connecting to #${normalizedChannel}`);
-
   client.on('message', (channel: string, tags: any, message: string, self: boolean) => {
     if (self) return;
     
@@ -74,46 +71,49 @@ export async function startTwitch({
     }
   });
 
+  // Set connecting status immediately when starting connection
+  onStatusChange?.('connecting', `Connecting to Twitch IRC for #${normalizedChannel}`);
+
   client.on('connected', (addr: string, port: number) => {
     if (debug) console.log(`[twitch] connected to ${addr}:${port}`);
-    onStatusChange?.('connected', `Connected to #${normalizedChannel}`);
+    onStatusChange?.('connected', `Connected to Twitch IRC for #${normalizedChannel}`);
   });
 
   client.on('disconnected', (reason: string) => {
     if (debug) console.log(`[twitch] disconnected: ${reason}`);
-    onStatusChange?.('disconnected', `Disconnected: ${reason}`);
+    onStatusChange?.('disconnected', `Disconnected from Twitch IRC: ${reason}`);
   });
 
   client.on('connecting', (address: string, port: number) => {
     if (debug) console.log(`[twitch] connecting to ${address}:${port}`);
-    onStatusChange?.('connecting', `Connecting to ${address}:${port}`);
+    onStatusChange?.('connecting', `Connecting to Twitch IRC: ${address}:${port}`);
   });
 
   client.on('reconnect', () => {
     if (debug) console.log(`[twitch] reconnecting...`);
-    onStatusChange?.('connecting', 'Reconnecting to Twitch...');
+    onStatusChange?.('connecting', 'Reconnecting to Twitch IRC...');
   });
 
   // Handle connection errors
   client.on('error', (err: Error) => {
-    console.error('[twitch] connection error:', err.message);
-    onStatusChange?.('error', `Connection error: ${err.message}`);
+    console.error('[twitch] IRC connection error:', err.message);
+    onStatusChange?.('error', `Twitch IRC error: ${err.message}`);
   });
 
   try {
     await client.connect();
-    if (debug) console.log('[twitch] connected to channel:', `#${normalizedChannel}`);
+    if (debug) console.log('[twitch] successfully connected to IRC for channel:', `#${normalizedChannel}`);
   } catch (error) {
-    console.error('[twitch] failed to connect:', (error as Error).message);
-    onStatusChange?.('error', `Failed to connect: ${(error as Error).message}`);
+    console.error('[twitch] failed to connect to IRC:', (error as Error).message);
+    onStatusChange?.('error', `Failed to connect to Twitch IRC: ${(error as Error).message}`);
     throw error;
   }
 
   return async function stop(): Promise<void> {
     try {
       await client.disconnect();
-      if (debug) console.log('[twitch] disconnected');
-      onStatusChange?.('disconnected', 'Manually disconnected');
+      if (debug) console.log('[twitch] disconnected from IRC');
+      onStatusChange?.('disconnected', 'Manually disconnected from Twitch IRC');
     } catch (error) {
       if (debug) console.error('[twitch] disconnect error:', (error as Error).message);
       onStatusChange?.('error', `Disconnect error: ${(error as Error).message}`);

@@ -29,8 +29,8 @@ const statusConfig = {
   },
   disconnected: {
     icon: WifiOff,
-    color: 'text-gray-400',
-    bgColor: 'bg-gray-400/20',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-400/20',
     label: 'Twitch Disconnected',
   },
   error: {
@@ -52,16 +52,16 @@ export const TwitchConnectionStatus: React.FC<TwitchConnectionStatusProps> = ({
   const getTooltipText = (): string => {
     switch (currentStatus) {
       case 'connected':
-        return 'Twitch chat is connected and monitoring messages'
+        return 'Connected to Twitch IRC - chat messages will be received (stream can be offline)'
       case 'connecting':
-        return 'Connecting to Twitch chat...'
+        return 'Connecting to Twitch IRC chat server...'
       case 'disconnected':
-        return 'Twitch chat disconnected - will attempt to reconnect'
+        return 'Disconnected from Twitch IRC - will attempt to reconnect automatically'
       case 'error':
-        return 'Twitch connection error - check your channel configuration'
+        return 'Twitch IRC connection error - check your channel configuration'
       case 'stopped':
       default:
-        return 'Twitch chat monitoring is not configured'
+        return 'Twitch chat monitoring is not configured (missing TWITCH_CHANNEL)'
     }
   }
 
