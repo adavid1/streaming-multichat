@@ -23,6 +23,7 @@ export const useWebSocket = (
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
+  const isUnmountedRef = useRef(false)
   const maxReconnectAttempts = 5
 
   const wsUrl =
@@ -32,8 +33,25 @@ export const useWebSocket = (
       : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`)
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (isUnmountedRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
       return
+    }
+
+    // Clean up any existing connection first
+    if (wsRef.current) {
+      const currentWs = wsRef.current
+      if (
+        currentWs.readyState === WebSocket.OPEN ||
+        currentWs.readyState === WebSocket.CONNECTING
+      ) {
+        // Remove event listeners to prevent errors during cleanup
+        currentWs.onopen = null
+        currentWs.onmessage = null
+        currentWs.onclose = null
+        currentWs.onerror = null
+        currentWs.close()
+      }
+      wsRef.current = null
     }
 
     setConnectionStatus('connecting')
@@ -43,11 +61,17 @@ export const useWebSocket = (
       wsRef.current = ws
 
       ws.onopen = () => {
-        setConnectionStatus('connected')
-        reconnectAttemptsRef.current = 0
+        // Only update state if this is still the current WebSocket
+        if (wsRef.current === ws) {
+          setConnectionStatus('connected')
+          reconnectAttemptsRef.current = 0
+        }
       }
 
       ws.onmessage = (event) => {
+        // Only process messages if this is still the current WebSocket
+        if (wsRef.current !== ws) return
+
         try {
           const data: WebSocketMessage | ChatMessage = JSON.parse(event.data)
 
@@ -79,23 +103,40 @@ export const useWebSocket = (
       }
 
       ws.onclose = (event) => {
-        setConnectionStatus('disconnected')
-        wsRef.current = null
+        // Only handle close if this is still the current WebSocket
+        if (wsRef.current === ws) {
+          setConnectionStatus('disconnected')
+          wsRef.current = null
 
-        // Auto-reconnect with exponential backoff
-        if (!event.wasClean && reconnectAttemptsRef.current < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000)
+          // Auto-reconnect with exponential backoff (only if not a clean close and not unmounted)
+          if (
+            !event.wasClean &&
+            !isUnmountedRef.current &&
+            reconnectAttemptsRef.current < maxReconnectAttempts
+          ) {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000)
 
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current++
-            connect()
-          }, delay)
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (!isUnmountedRef.current) {
+                reconnectAttemptsRef.current++
+                connect()
+              }
+            }, delay)
+          }
         }
       }
 
       ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error)
-        setConnectionStatus('error')
+        // Only handle error if this is still the current WebSocket
+        if (wsRef.current === ws) {
+          // Only log errors for connections that were expected to work
+          // Skip logging if the connection was closed immediately (React Strict Mode)
+          if (ws.readyState !== WebSocket.CLOSED && !isUnmountedRef.current) {
+            console.error('[WebSocket] Error:', error)
+          }
+          setConnectionStatus('error')
+          wsRef.current = null
+        }
       }
     } catch (error) {
       console.error('[WebSocket] Failed to create connection:', error)
@@ -104,13 +145,28 @@ export const useWebSocket = (
   }, [wsUrl, onMessage])
 
   const disconnect = useCallback(() => {
+    isUnmountedRef.current = true
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
 
     if (wsRef.current) {
-      wsRef.current.close()
+      const currentWs = wsRef.current
+      // Remove event listeners to prevent errors during cleanup
+      currentWs.onopen = null
+      currentWs.onmessage = null
+      currentWs.onclose = null
+      currentWs.onerror = null
+
+      // Only close if the WebSocket is in a valid state
+      if (
+        currentWs.readyState === WebSocket.OPEN ||
+        currentWs.readyState === WebSocket.CONNECTING
+      ) {
+        currentWs.close()
+      }
       wsRef.current = null
     }
 
@@ -127,9 +183,17 @@ export const useWebSocket = (
 
   // Connect on mount, disconnect on unmount
   useEffect(() => {
-    connect()
+    isUnmountedRef.current = false
+
+    // Small delay to prevent connection attempts during React Strict Mode cleanup
+    const connectTimer = setTimeout(() => {
+      if (!isUnmountedRef.current) {
+        connect()
+      }
+    }, 10)
 
     return () => {
+      clearTimeout(connectTimer)
       disconnect()
     }
   }, [connect, disconnect])
