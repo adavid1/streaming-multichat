@@ -3,7 +3,6 @@ import { MessageSquare, Settings, X } from 'lucide-react'
 import { ChatMessage } from './components/ChatMessage'
 import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
-import { YouTubeControls } from './components/YouTubeControls'
 import { YouTubeConnectionStatus } from './components/YouTubeConnectionStatus'
 import { TwitchConnectionStatus } from './components/TwitchConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
@@ -37,7 +36,7 @@ const App: React.FC = () => {
 
   const { connectionStatus, isConnected, twitchBadges, lastWebSocketMessage } = useWebSocket()
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
-  const { startYouTube, stopYouTube, isLoading: youtubeLoading } = useYouTubeControls()
+  const { startYouTube, isLoading: youtubeLoading } = useYouTubeControls()
 
   // Handle YouTube and Twitch status updates from WebSocket
   useEffect(() => {
@@ -91,14 +90,6 @@ const App: React.FC = () => {
     }
   }, [startYouTube])
 
-  const handleYouTubeStop = useCallback(async () => {
-    try {
-      await stopYouTube()
-    } catch (error) {
-      console.error('Failed to stop YouTube:', error)
-    }
-  }, [stopYouTube])
-
   // Set up body classes for styling
   useEffect(() => {
     document.body.className = isPublicMode ? 'public' : 'private'
@@ -127,7 +118,6 @@ const App: React.FC = () => {
                 <YouTubeConnectionStatus
                   status={youtubeStatus}
                   onStart={handleYouTubeStart}
-                  onStop={handleYouTubeStop}
                   disabled={youtubeLoading}
                 />
                 <button
@@ -162,16 +152,6 @@ const App: React.FC = () => {
                   searchQuery={searchQuery}
                   onFilterChange={handleFilterChange}
                   onSearchChange={handleSearchChange}
-                />
-              </div>
-
-              {/* YouTube Controls */}
-              <div className="mb-6 border-t border-gray-800 pt-4">
-                <YouTubeControls
-                  status={youtubeStatus}
-                  onStart={handleYouTubeStart}
-                  onStop={handleYouTubeStop}
-                  disabled={youtubeLoading}
                 />
               </div>
 

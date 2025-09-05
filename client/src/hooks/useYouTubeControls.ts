@@ -3,7 +3,6 @@ import type { YouTubeStatus } from '../../../shared/types'
 
 interface UseYouTubeControlsReturn {
   startYouTube: () => Promise<void>
-  stopYouTube: () => Promise<void>
   getYouTubeStatus: () => Promise<YouTubeStatus | null>
   isLoading: boolean
   error: string | null
@@ -53,28 +52,6 @@ export const useYouTubeControls = (): UseYouTubeControlsReturn => {
     }
   }, [apiCall])
 
-  const stopYouTube = useCallback(async (): Promise<void> => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const result = await apiCall('stop', 'POST')
-
-      if (!result.success) {
-        throw new Error('Failed to stop YouTube monitoring')
-      }
-
-      console.log('[youtube-controls] Successfully stopped YouTube monitoring')
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      setError(errorMessage)
-      console.error('[youtube-controls] Failed to stop YouTube:', errorMessage)
-      throw err
-    } finally {
-      setIsLoading(false)
-    }
-  }, [apiCall])
-
   const getYouTubeStatus = useCallback(async (): Promise<YouTubeStatus | null> => {
     try {
       const result = await apiCall('status', 'GET')
@@ -90,7 +67,6 @@ export const useYouTubeControls = (): UseYouTubeControlsReturn => {
 
   return {
     startYouTube,
-    stopYouTube,
     getYouTubeStatus,
     isLoading,
     error,

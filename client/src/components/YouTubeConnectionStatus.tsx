@@ -6,7 +6,6 @@ import type { YouTubeStatus } from '../../../shared/types'
 interface YouTubeConnectionStatusProps {
   status: YouTubeStatus | null
   onStart: () => Promise<void>
-  onStop: () => Promise<void>
   disabled?: boolean
 }
 
@@ -58,7 +57,6 @@ const statusConfig = {
 export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = ({
   status,
   onStart,
-  onStop,
   disabled = false,
 }) => {
   const [isLoading, setIsLoading] = useState(false)
@@ -74,8 +72,6 @@ export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = (
     try {
       if (config.action === 'start') {
         await onStart()
-      } else {
-        await onStop()
       }
     } catch (error) {
       console.error('Failed to toggle YouTube connection:', error)
