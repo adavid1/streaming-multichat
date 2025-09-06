@@ -131,12 +131,14 @@ const App: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <ConnectionStatus status={connectionStatus} />
-                <TwitchConnectionStatus status={twitchStatus?.status || null} />
-                <YouTubeConnectionStatus
-                  status={youtubeStatus}
-                  onStart={handleYouTubeStart}
-                  disabled={youtubeLoading}
-                />
+                {isConnected && <TwitchConnectionStatus status={twitchStatus?.status || null} />}
+                {isConnected && (
+                  <YouTubeConnectionStatus
+                    status={youtubeStatus}
+                    onStart={handleYouTubeStart}
+                    disabled={youtubeLoading}
+                  />
+                )}
                 <button
                   onClick={toggleSettings}
                   className="rounded-lg bg-gray-800 p-2 transition-colors hover:bg-gray-700"
