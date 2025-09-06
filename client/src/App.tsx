@@ -8,6 +8,7 @@ import { TwitchConnectionStatus } from './components/TwitchConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
 import { useYouTubeControls } from './hooks/useYouTubeControls'
+import { useTwitchControls } from './hooks/useTwitchControls'
 import { BadgeProvider } from './contexts/BadgeContext'
 import { EmoteProvider } from './contexts/EmoteContext'
 import type { PlatformFilters, YouTubeStatus, TwitchStatus } from '../../shared/types'
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const { connectionStatus, isConnected, twitchBadges, lastWebSocketMessage } = useWebSocket()
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
   const { startYouTube, isLoading: youtubeLoading } = useYouTubeControls()
+  const { getTwitchStatus } = useTwitchControls()
 
   // Handle YouTube and Twitch status updates from WebSocket
   useEffect(() => {
@@ -50,6 +52,21 @@ const App: React.FC = () => {
       setTwitchStatus(statusData)
     }
   }, [lastWebSocketMessage])
+
+  // Fetch initial Twitch status when connected
+  useEffect(() => {
+    if (isConnected && !twitchStatus) {
+      getTwitchStatus()
+        .then((status) => {
+          if (status) {
+            setTwitchStatus(status)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch initial Twitch status:', error)
+        })
+    }
+  }, [isConnected, twitchStatus, getTwitchStatus])
 
   // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {

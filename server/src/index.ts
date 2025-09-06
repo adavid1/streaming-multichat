@@ -51,6 +51,24 @@ app.get('/api/badges/:channel', async (req, res) => {
   }
 });
 
+// Twitch status endpoint
+app.get('/api/twitch/status', (req, res) => {
+  try {
+    if (!twitchStatus) {
+      return res.json({ 
+        status: 'stopped', 
+        message: 'Twitch not configured or not started',
+        channel: process.env.TWITCH_CHANNEL || null
+      });
+    }
+    
+    res.json(twitchStatus);
+  } catch (error) {
+    console.error('[api] Error getting Twitch status:', (error as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // YouTube control endpoints
 app.post('/api/youtube/start', async (req, res) => {
   try {
@@ -262,13 +280,17 @@ wss.on('connection', (ws) => {
     } as WebSocketMessage));
   }
   
-  // Send current Twitch status if available
-  if (twitchStatus) {
-    ws.send(JSON.stringify({
-      type: 'twitch-status',
-      data: twitchStatus
-    } as WebSocketMessage));
-  }
+  // Send current Twitch status if available (or default status)
+  const currentTwitchStatus = twitchStatus || {
+    status: 'stopped' as const,
+    message: process.env.TWITCH_CHANNEL ? 'Not started' : 'No Twitch channel configured',
+    channel: process.env.TWITCH_CHANNEL || undefined
+  };
+  
+  ws.send(JSON.stringify({
+    type: 'twitch-status',
+    data: currentTwitchStatus
+  } as WebSocketMessage));
   
   // Send YouTube status if adapter exists
   if (youTubeAdapter) {
