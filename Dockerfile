@@ -5,19 +5,17 @@ WORKDIR /app
 # -------------------------
 # Install dependencies
 # -------------------------
-FROM base AS deps
+  FROM base AS deps
 
-# Copy package files
-COPY package*.json ./
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
-COPY shared/package*.json ./shared/
-
-# Install all dependencies (including dev)
-RUN npm ci --ignore-scripts
-RUN cd server && npm ci --ignore-scripts
-RUN cd client && npm ci --ignore-scripts
-RUN cd shared && npm ci --ignore-scripts
+  # Copy package files
+  COPY package*.json ./
+  COPY server/package*.json ./server/
+  COPY client/package*.json ./client/
+  
+  # Install all dependencies (including dev)
+  RUN npm ci --ignore-scripts
+  RUN cd server && npm ci --ignore-scripts
+  RUN cd client && npm ci --ignore-scripts
 
 # -------------------------
 # Build client & server
