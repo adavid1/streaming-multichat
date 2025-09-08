@@ -7,7 +7,18 @@ interface TwitchConnectionStatusProps {
   disabled?: boolean
 }
 
-const statusConfig = {
+interface StatusConfig {
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  bgColor: string
+  label: string
+  animate?: boolean
+}
+
+const statusConfig: Record<
+  'stopped' | 'connecting' | 'connected' | 'disconnected' | 'error',
+  StatusConfig
+> = {
   stopped: {
     icon: WifiOff,
     color: 'text-gray-400',

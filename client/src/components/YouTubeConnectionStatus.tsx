@@ -9,7 +9,20 @@ interface YouTubeConnectionStatusProps {
   disabled?: boolean
 }
 
-const statusConfig = {
+interface StatusConfig {
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  bgColor: string
+  hoverColor: string
+  label: string
+  action: 'start' | 'stop'
+  animate?: boolean
+}
+
+const statusConfig: Record<
+  'stopped' | 'connecting' | 'connected' | 'error' | 'retrying',
+  StatusConfig
+> = {
   stopped: {
     icon: Square,
     color: 'text-gray-400',
