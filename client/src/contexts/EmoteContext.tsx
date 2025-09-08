@@ -34,7 +34,7 @@ export const EmoteProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const loadEmotes = async () => {
       try {
         setIsLoading(true)
-        const response = await fetch('/twitchGlobalEmotes.json')
+        const response = await fetch('/public/twitchGlobalEmotes.json')
 
         if (!response.ok) {
           throw new Error(`Failed to load emotes: ${response.status}`)

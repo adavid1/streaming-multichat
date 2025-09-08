@@ -98,10 +98,6 @@ out
 .nuxt
 dist
 
-# Gatsby files
-.cache/
-public
-
 # Vite build tool
 .vite
 vite.config.js.timestamp-*

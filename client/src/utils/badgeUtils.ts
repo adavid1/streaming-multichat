@@ -1,4 +1,4 @@
-import twitchGlobalBadges from '../../twitchGlobalBadges.json'
+import twitchGlobalBadges from '../../public/twitchGlobalBadges.json'
 
 interface BadgeVersion {
   id: string
