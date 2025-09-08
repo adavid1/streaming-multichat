@@ -385,7 +385,6 @@ async function initializeAdapters(): Promise<void> {
     try {
       youTubeAdapter = await createYouTubeAdapter({
         channelId: process.env.YT_CHANNEL_ID,
-        retryWhenOffline: (process.env.YT_RETRY_WHEN_OFFLINE || 'true').toLowerCase() === 'true',
         onMessage(evt: AdapterEvent) {
           const normalized = normalize({ platform: 'youtube', ...evt });
           broadcast(normalized);
@@ -406,17 +405,6 @@ async function initializeAdapters(): Promise<void> {
       stopFns.push(() => youTubeAdapter?.stop());
       
       console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.');
-      
-      // Optionally auto-start if YT_AUTO_START is set
-      if (process.env.YT_AUTO_START?.toLowerCase() === 'true') {
-        console.log('[youtube] Auto-starting YouTube adapter...');
-        try {
-          await youTubeAdapter.start();
-        } catch (error) {
-          console.log('[youtube] Auto-start failed - manual start required');
-        }
-      }
-      
     } catch (error) {
       console.error('[youtube] Failed to initialize adapter:', (error as Error).message);
     }

@@ -43,7 +43,6 @@ export interface TwitchConfig {
 
 export interface YouTubeConfig {
   channelId: string; // UC... channel id for youtube-chat
-  retryWhenOffline: boolean;
 }
 
 export interface TikTokConfig {

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  multichat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multichat-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=8787
+      # Copy these from your .env file
+      - DEBUG=false
+      - TWITCH_CHANNEL=${TWITCH_CHANNEL}
+      - TWITCH_OAUTH=${TWITCH_OAUTH}
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}
+      - YT_CHANNEL_ID=${YT_CHANNEL_ID}
+      - TIKTOK_USERNAME=${TIKTOK_USERNAME}
+    ports:
+      - "8787:8787"
+    volumes:
+      # Optional: mount logs directory for persistence
+      - ./logs:/app/logs
+    networks:
+      - multichat-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  multichat-network:
+    driver: bridge
+
+volumes:
+  multichat-logs:

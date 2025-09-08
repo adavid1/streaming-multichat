@@ -12,7 +12,6 @@ interface YouTubeAdapterReturn extends StopFunction {
 
 export async function createYouTubeAdapter({ 
   channelId,
-  retryWhenOffline = true, 
   onMessage, 
   debug = false,
   onStatusChange
@@ -86,7 +85,7 @@ export async function createYouTubeAdapter({
         updateStatus('stopped', 'Stream ended');
         
         // Don't auto-retry when stream ends normally
-        if (retryWhenOffline && consecutiveErrors < 5) {
+        if (consecutiveErrors < 5) {
           scheduleRetry('Stream ended, will retry when stream starts again');
         }
       });
@@ -108,7 +107,7 @@ export async function createYouTubeAdapter({
           return;
         }
         
-        if (status !== 'stopped' && retryWhenOffline) {
+        if (status !== 'stopped') {
           updateStatus('retrying', `Error: ${errorMessage}`);
           scheduleRetry(errorMessage);
         } else {
@@ -149,7 +148,7 @@ export async function createYouTubeAdapter({
         console.error(`[youtube] Start failed (attempt ${retryCount + 1}):`, errorMessage);
       }
       
-      if (retryWhenOffline && retryCount < MAX_RETRY_ATTEMPTS && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+      if (retryCount < MAX_RETRY_ATTEMPTS && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
         updateStatus('retrying', errorMessage);
         scheduleRetry(errorMessage);
       } else {
