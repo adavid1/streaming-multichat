@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "build:shared": "tsc -b ../shared"
   },
   "dependencies": {
     "cors": "^2.8.5",
