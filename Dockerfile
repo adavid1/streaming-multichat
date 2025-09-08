@@ -31,12 +31,15 @@ WORKDIR /app
   COPY --from=deps /app/server/node_modules ./server/node_modules
   COPY --from=deps /app/client/node_modules ./client/node_modules
   
-  # Ensure devDependencies exist
+  # Ensure devDependencies exist for server
   RUN cd server && npm install typescript --save-dev
   
-  # Build client and server
+  # 1️⃣ Build shared first
+  RUN cd shared && npx tsc --build
+  
+  # 2️⃣ Build server and client
+  RUN cd server && npx tsc --build
   RUN cd client && npm run build
-  RUN cd server && npm run build
   
   # -------------------------
   # Production image
