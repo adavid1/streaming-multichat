@@ -411,24 +411,6 @@ async function initializeAdapters(): Promise<void> {
   } else {
     console.warn('[youtube] skipped: set YT_CHANNEL_ID in your environment to enable YouTube');
   }
-
-  // Fake messages for testing
-  if (process.env.FAKE_MESSAGES === "true") {
-    const platforms: Platform[] = ["twitch", "youtube", "tiktok"];
-    const interval = setInterval(() => {
-      console.log('sending fake message...')
-      const platform = platforms[Math.floor(Math.random() * platforms.length)];
-      const fakeMsg = normalize({
-        platform,
-        username: "User" + Math.floor(Math.random() * 1000),
-        message: "Hello world " + Math.floor(Math.random() * 100),
-        badges: Math.random() > 0.7 ? ["moderator","vip","no_video", "no_audio"] : []
-      });
-      broadcast(fakeMsg);
-    }, 2000);
-
-    stopFns.push(() => clearInterval(interval));
-  }
 }
 
 // Start server
