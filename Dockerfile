@@ -1,83 +1,74 @@
+# Multi-stage build for multichat app
+FROM node:18-alpine AS base
+
 # -------------------------
-# Base image
+# Install dependencies
 # -------------------------
-  FROM node:18-alpine AS base
-  WORKDIR /app
-  
-  # -------------------------
-  # Install dependencies
-  # -------------------------
-  FROM base AS deps
-  
-  # Copy root package files
-  COPY package*.json ./
-  
-  # Copy package files for server and client
-  COPY server/package*.json ./server/
-  COPY client/package*.json ./client/
-  COPY shared/package*.json ./shared/
-  
-  # Install all dependencies including dev
-  RUN npm ci --ignore-scripts
-  RUN cd server && npm ci --ignore-scripts
-  RUN cd client && npm ci --ignore-scripts
-  RUN cd shared && npm ci --ignore-scripts
-  
-  # -------------------------
-  # Build shared, client & server
-  # -------------------------
-  FROM base AS builder
-  WORKDIR /app
-  
-  # Copy entire source code
-  COPY . .
-  
-  # Copy node_modules from deps
-  COPY --from=deps /app/node_modules ./node_modules
-  COPY --from=deps /app/server/node_modules ./server/node_modules
-  COPY --from=deps /app/client/node_modules ./client/node_modules
-  COPY --from=deps /app/shared/node_modules ./shared/node_modules
-  
-  # Build shared first (Project Reference)
-  RUN cd shared && npm run build
-  
-  # Build server (references compiled shared)
-  RUN cd server && npm run build
-  
-  # Build client
-  RUN cd client && npm run build
-  
-  # -------------------------
-  # Production image
-  # -------------------------
-  FROM node:18-alpine AS runner
-  WORKDIR /app
-  ENV NODE_ENV=production
-  
-  # Create non-root user
-  RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 multichat
-  
-  # Copy built outputs
-  COPY --from=builder /app/server/dist ./server/dist
-  COPY --from=builder /app/shared/dist ./shared/dist
-  COPY --from=builder /app/client/dist ./client/dist
-  COPY --from=builder /app/client/public/twitchGlobalEmotes.json ./client/dist/
-  COPY --from=builder /app/client/public/twitchGlobalBadges.json ./client/dist/
-  
-  # Copy production dependencies for server
-  COPY server/package*.json ./server/
-  RUN cd server && npm ci --only=production --ignore-scripts
-  
-  # Set permissions
-  RUN chown -R multichat:nodejs /app
-  USER multichat
-  
-  EXPOSE 8787
-  
-  # Healthcheck
-  HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8787/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
-  
-  CMD ["node", "server/dist/index.js"]
-  
+FROM base AS deps
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY server/package*.json ./server/
+COPY client/package*.json ./client/
+COPY shared/package*.json ./shared/  # <-- copy shared first
+
+# Install dependencies
+RUN npm ci --ignore-scripts
+RUN cd server && npm ci --ignore-scripts
+RUN cd client && npm ci --ignore-scripts
+RUN cd shared && npm ci --ignore-scripts  # <-- now this works
+
+# -------------------------
+# Build client & server
+# -------------------------
+FROM base AS builder
+WORKDIR /app
+
+# Copy source code
+COPY . .
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/server/node_modules ./server/node_modules
+COPY --from=deps /app/client/node_modules ./client/node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+
+# Ensure devDependencies exist
+RUN cd server && npm install typescript --save-dev
+
+# Build client and server
+RUN cd client && npm run build
+RUN cd server && npm run build
+
+# -------------------------
+# Production image
+# -------------------------
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Create app user
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 multichat
+
+# Copy built application
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/client/dist ./client/dist
+COPY --from=builder /app/client/public/twitchGlobalEmotes.json ./client/dist/
+COPY --from=builder /app/client/public/twitchGlobalBadges.json ./client/dist/
+
+# Install only production dependencies for server
+COPY server/package*.json ./server/
+RUN cd server && npm ci --only=production --ignore-scripts
+
+# Set permissions
+RUN chown -R multichat:nodejs /app
+USER multichat
+
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8787/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+CMD ["node", "server/dist/index.js"]
