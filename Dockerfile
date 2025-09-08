@@ -1,6 +1,7 @@
 # Multi-stage build for multichat app
 FROM node:18-alpine AS base
 WORKDIR /app
+RUN npm install -g typescript
 
 # -------------------------
 # Install dependencies
