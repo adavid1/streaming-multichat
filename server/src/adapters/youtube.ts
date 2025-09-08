@@ -16,7 +16,7 @@ export async function createYouTubeAdapter({
   debug = false,
   onStatusChange
 }: YouTubeAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<YouTubeAdapterReturn> {
-  let chat: LiveChat | null = null;
+  let chat: InstanceType<typeof LiveChat> | null = null;
   let status: 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying' = 'stopped';
   let retryCount = 0;
   let retryTimeout: NodeJS.Timeout | null = null;
