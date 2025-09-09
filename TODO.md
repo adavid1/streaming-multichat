@@ -9,6 +9,7 @@
 * [v4] Ability to send messages to the chat (1 platform or all platforms at the same time)
 * [v5] Add Kick chat
 # Bugs
+* Button start TikTok like Youtube
 * Some colors for Twitch pseudos are not working
 * Fix Twitch sub gifter badges
 * [youtube] Chat error (39/15): Cannot read properties of undefined (reading '
