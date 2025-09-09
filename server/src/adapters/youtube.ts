@@ -78,9 +78,7 @@ export async function createYouTubeAdapter({
         console.log('[youtube] Chat started successfully for channel:', channelId);
       });
 
-      chat.on('end', () => {
-        if (status === 'stopped') return; // Intentionally stopped
-        
+      chat.on('end', () => {       
         console.log('[youtube] Chat ended - stream likely finished');
         updateStatus('stopped', 'Stream ended');
         
@@ -171,18 +169,8 @@ export async function createYouTubeAdapter({
     
     retryTimeout = setTimeout(async () => {
       retryTimeout = null;
-      if (status !== 'stopped') {
-        await start();
-      }
+      await start();
     }, delay);
-  };
-
-  const stop = async (): Promise<void> => {
-    updateStatus('stopped', 'Manually stopped');
-    cleanup();
-    retryCount = 0;
-    consecutiveErrors = 0;
-    console.log('[youtube] YouTube adapter stopped');
   };
 
   const isRunning = (): boolean => {
@@ -191,27 +179,11 @@ export async function createYouTubeAdapter({
 
   const getStatus = () => status;
 
-  // Return the controller object that also acts as a stop function
-  const controller = Object.assign(stop, {
+  const controller = Object.assign({
     start,
-    stop,
     isRunning,
     getStatus
   });
 
   return controller;
-}
-
-// Legacy function for backward compatibility
-export async function startYouTube(config: YouTubeAdapterConfig): Promise<StopFunction> {
-  const adapter = await createYouTubeAdapter(config);
-  
-  // Auto-start the adapter
-  try {
-    await adapter.start();
-  } catch (error) {
-    console.error('[youtube] Auto-start failed:', (error as Error).message);
-  }
-  
-  return adapter.stop;
 }
