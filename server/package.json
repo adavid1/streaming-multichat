@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
-    "build:shared": "tsc -b ../shared"
+    "build:shared": "tsc -b ../shared",
+    "lint": "eslint . --fix"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,6 +21,7 @@
     "youtube-chat": "^2.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.35.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.5",
@@ -27,7 +29,11 @@
     "@types/uuid": "^9.0.7",
     "@types/ws": "^8.5.10",
     "cross-env": "^10.0.0",
+    "eslint": "^9.35.0",
+    "globals": "^16.4.0",
+    "jiti": "^2.5.1",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.43.0"
   }
 }

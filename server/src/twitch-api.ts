@@ -318,7 +318,7 @@ export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadg
     }
 
     // Step 2: Try to fetch channel-specific badges
-    let channelBadges = await fetchChannelBadgesHelix(broadcasterId);
+    const channelBadges = await fetchChannelBadgesHelix(broadcasterId);
     
     // Step 3: If channel badges failed or don't contain subscriber badges, try global + merge
     if (!channelBadges || !channelBadges.badge_sets.subscriber) {
