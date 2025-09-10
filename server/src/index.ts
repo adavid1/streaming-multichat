@@ -1,55 +1,55 @@
-import 'dotenv/config';
-import http from 'http';
-import express from 'express';
-import cors from 'cors';
-import { WebSocketServer } from 'ws';
-import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import 'dotenv/config'
+import http from 'http'
+import express from 'express'
+import cors from 'cors'
+import { WebSocketServer } from 'ws'
+import { v4 as uuidv4 } from 'uuid'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { existsSync } from 'fs'
 
-import { startTwitch } from './adapters/twitch.js';
-import { startTikTok } from './adapters/tiktok.js';
-import { createYouTubeAdapter } from './adapters/youtube.js';
-import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js';
-import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js';
+import { startTwitch } from './adapters/twitch.js'
+import { startTikTok } from './adapters/tiktok.js'
+import { createYouTubeAdapter } from './adapters/youtube.js'
+import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js'
+import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-const PORT = parseInt(process.env.PORT || '8787', 10);
-const DEBUG = (process.env.DEBUG || 'false').toLowerCase() === 'true';
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const PORT = parseInt(process.env.PORT || '8787', 10)
+const DEBUG = (process.env.DEBUG || 'false').toLowerCase() === 'true'
+const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // Express server
-const app = express();
-app.use(cors());
+const app = express()
+app.use(cors())
 
 // Health check endpoint
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true }))
 
 // Badge endpoint for fetching channel-specific badges
 app.get('/api/badges/:channel', async (req, res) => {
   try {
-    const { channel } = req.params;
+    const { channel } = req.params
     
     if (!channel) {
-      return res.status(400).json({ error: 'Channel parameter is required' });
+      return res.status(400).json({ error: 'Channel parameter is required' })
     }
     
-    console.log(`[api] Fetching badges for channel: ${channel}`);
-    const badges = await getTwitchBadgesPublic(channel);
+    console.log(`[api] Fetching badges for channel: ${channel}`)
+    const badges = await getTwitchBadgesPublic(channel)
     
     if (!badges) {
-      return res.status(404).json({ error: 'Failed to fetch badges for channel' });
+      return res.status(404).json({ error: 'Failed to fetch badges for channel' })
     }
     
-    res.json(badges);
+    res.json(badges)
   } catch (error) {
-    console.error('[api] Error fetching badges:', (error as Error).message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api] Error fetching badges:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 // Twitch status endpoint
 app.get('/api/twitch/status', (req, res) => {
@@ -59,93 +59,93 @@ app.get('/api/twitch/status', (req, res) => {
         status: 'stopped', 
         message: 'Twitch not configured or not started',
         channel: process.env.TWITCH_CHANNEL || null
-      });
+      })
     }
     
-    res.json(twitchStatus);
+    res.json(twitchStatus)
   } catch (error) {
-    console.error('[api] Error getting Twitch status:', (error as Error).message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api] Error getting Twitch status:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 // YouTube control endpoints
 app.post('/api/youtube/start', async (req, res) => {
   try {
     if (!youTubeAdapter) {
-      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+      return res.status(400).json({ error: 'YouTube adapter not initialized' })
     }
     
-    const success = await youTubeAdapter.start();
-    const status = youTubeAdapter.getStatus();
+    const success = await youTubeAdapter.start()
+    const status = youTubeAdapter.getStatus()
     
     // Broadcast status update to all clients
     broadcast({
       type: 'youtube-status',
       data: { status, action: 'start', success }
-    } as WebSocketMessage);
+    } as WebSocketMessage)
     
-    res.json({ success, status });
+    res.json({ success, status })
   } catch (error) {
-    console.error('[api] Error starting YouTube:', (error as Error).message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api] Error starting YouTube:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 app.post('/api/youtube/stop', async (req, res) => {
   try {
     if (!youTubeAdapter) {
-      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+      return res.status(400).json({ error: 'YouTube adapter not initialized' })
     }
     
-    await youTubeAdapter.stop();
-    const status = youTubeAdapter.getStatus();
+    await youTubeAdapter.stop()
+    const status = youTubeAdapter.getStatus()
     
     // Broadcast status update to all clients
     broadcast({
       type: 'youtube-status',
       data: { status, action: 'stop' }
-    } as WebSocketMessage);
+    } as WebSocketMessage)
     
-    res.json({ success: true, status });
+    res.json({ success: true, status })
   } catch (error) {
-    console.error('[api] Error stopping YouTube:', (error as Error).message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api] Error stopping YouTube:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 app.get('/api/youtube/status', (req, res) => {
   try {
     if (!youTubeAdapter) {
-      return res.status(400).json({ error: 'YouTube adapter not initialized' });
+      return res.status(400).json({ error: 'YouTube adapter not initialized' })
     }
     
-    const status = youTubeAdapter.getStatus();
-    const isRunning = youTubeAdapter.isRunning();
+    const status = youTubeAdapter.getStatus()
+    const isRunning = youTubeAdapter.isRunning()
     
-    res.json({ status, isRunning });
+    res.json({ status, isRunning })
   } catch (error) {
-    console.error('[api] Error getting YouTube status:', (error as Error).message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api] Error getting YouTube status:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 // In development, don't serve static files (Vite handles this)
 // In production, serve the built React app
 if (!isDevelopment) {
-  const clientDistPath = path.join(__dirname, '../../client/dist');
+  const clientDistPath = path.join(__dirname, '../../client/dist')
   
   if (existsSync(clientDistPath)) {
-    console.log(`[server] Serving static files from ${clientDistPath}`);
-    app.use(express.static(clientDistPath));
+    console.log(`[server] Serving static files from ${clientDistPath}`)
+    app.use(express.static(clientDistPath))
     
     // Serve React app for all other routes (SPA routing)
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(clientDistPath, 'index.html'));
-    });
+      res.sendFile(path.join(clientDistPath, 'index.html'))
+    })
   } else {
-    console.warn(`[server] Client dist folder not found at ${clientDistPath}`);
-    console.warn('[server] Run "npm run build" to build the client first');
+    console.warn(`[server] Client dist folder not found at ${clientDistPath}`)
+    console.warn('[server] Run "npm run build" to build the client first')
     
     // Provide helpful error page
     app.get('*', (_req, res) => {
@@ -163,11 +163,11 @@ if (!isDevelopment) {
             <p><strong>WebSocket server:</strong> Running on ws://localhost:${PORT}</p>
           </body>
         </html>
-      `);
-    });
+      `)
+    })
   }
 } else {
-  console.log('[server] Development mode - static files served by Vite');
+  console.log('[server] Development mode - static files served by Vite')
   
   // In development, provide a simple info page
   app.get('*', (_req, res) => {
@@ -184,59 +184,59 @@ if (!isDevelopment) {
           <p>Use: <a href="http://localhost:5173/?mode=public" style="color: #60a5fa;">http://localhost:5173/?mode=public</a></p>
         </body>
       </html>
-    `);
-  });
+    `)
+  })
 }
 
-const server = http.createServer(app);
+const server = http.createServer(app)
 
 // WebSocket server
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server })
 
 // Global storage
-let twitchBadges: TwitchBadgeResponse | null = null;
-let subscriptionBadgeUrls: Record<string, string> = {};
-let youTubeAdapter: any = null; // YouTube adapter instance
-let twitchStatus: TwitchStatus | null = null; // Twitch status
+let twitchBadges: TwitchBadgeResponse | null = null
+let subscriptionBadgeUrls: Record<string, string> = {}
+let youTubeAdapter: any = null // YouTube adapter instance
+let twitchStatus: TwitchStatus | null = null // Twitch status
 
 // Function to fetch Twitch badges
 async function fetchTwitchBadges(): Promise<void> {
-  const twitchChannel = process.env.TWITCH_CHANNEL;
+  const twitchChannel = process.env.TWITCH_CHANNEL
   if (!twitchChannel) {
-    console.log('[badges] No Twitch channel configured, skipping badge fetch');
-    return;
+    console.log('[badges] No Twitch channel configured, skipping badge fetch')
+    return
   }
   
   try {
-    console.log(`[badges] Fetching badges for channel: ${twitchChannel}`);
-    const badges = await getTwitchBadgesPublic(twitchChannel);
+    console.log(`[badges] Fetching badges for channel: ${twitchChannel}`)
+    const badges = await getTwitchBadgesPublic(twitchChannel)
     
     if (badges) {
-      twitchBadges = badges;
-      subscriptionBadgeUrls = extractSubscriptionBadges(badges);
-      console.log(`[badges] Successfully loaded ${Object.keys(subscriptionBadgeUrls).length} subscription badge versions`);
+      twitchBadges = badges
+      subscriptionBadgeUrls = extractSubscriptionBadges(badges)
+      console.log(`[badges] Successfully loaded ${Object.keys(subscriptionBadgeUrls).length} subscription badge versions`)
       
       // Broadcast badges to all connected clients
       broadcast({
         type: 'badges',
         data: badges
-      } as WebSocketMessage);
+      } as WebSocketMessage)
     } else {
-      console.error('[badges] Failed to fetch Twitch badges');
+      console.error('[badges] Failed to fetch Twitch badges')
     }
   } catch (error) {
-    console.error('[badges] Error fetching badges:', (error as Error).message);
+    console.error('[badges] Error fetching badges:', (error as Error).message)
   }
 }
 
 function broadcast(msg: ChatMessage | WebSocketMessage): void {
-  const data = JSON.stringify(msg);
+  const data = JSON.stringify(msg)
   for (const client of wss.clients) {
     if (client.readyState === client.OPEN) {
       try {
-        client.send(data);
+        client.send(data)
       } catch (e) {
-        if (DEBUG) console.error('WS send error:', (e as Error).message);
+        if (DEBUG) console.error('WS send error:', (e as Error).message)
       }
     }
   }
@@ -260,24 +260,24 @@ function normalize({
     badges,
     color: color || null,
     raw
-  };
+  }
 }
 
 wss.on('connection', (ws) => {
-  if (DEBUG) console.log('[ws] client connected');
+  if (DEBUG) console.log('[ws] client connected')
   
   // Send connection acknowledgment
   ws.send(JSON.stringify({ 
     type: 'connection', 
     message: 'Connected to multichat server' 
-  } as WebSocketMessage));
+  } as WebSocketMessage))
   
   // Send current badges if available
   if (twitchBadges) {
     ws.send(JSON.stringify({
       type: 'badges',
       data: twitchBadges
-    } as WebSocketMessage));
+    } as WebSocketMessage))
   }
   
   // Send current Twitch status if available (or default status)
@@ -285,40 +285,40 @@ wss.on('connection', (ws) => {
     status: 'stopped' as const,
     message: process.env.TWITCH_CHANNEL ? 'Not started' : 'No Twitch channel configured',
     channel: process.env.TWITCH_CHANNEL || undefined
-  };
+  }
   
   ws.send(JSON.stringify({
     type: 'twitch-status',
     data: currentTwitchStatus
-  } as WebSocketMessage));
+  } as WebSocketMessage))
   
   // Send YouTube status if adapter exists
   if (youTubeAdapter) {
-    const status = youTubeAdapter.getStatus();
+    const status = youTubeAdapter.getStatus()
     ws.send(JSON.stringify({
       type: 'youtube-status',
       data: { status, isRunning: youTubeAdapter.isRunning() }
-    } as WebSocketMessage));
+    } as WebSocketMessage))
   }
   
   ws.on('close', () => {
-    if (DEBUG) console.log('[ws] client disconnected');
-  });
-});
+    if (DEBUG) console.log('[ws] client disconnected')
+  })
+})
 
 // Start adapters
-const stopFns: StopFunction[] = [];
+const stopFns: StopFunction[] = []
 
 async function initializeAdapters(): Promise<void> {
   // Twitch
-  const twitchChannel = process.env.TWITCH_CHANNEL;
+  const twitchChannel = process.env.TWITCH_CHANNEL
   if (twitchChannel) {
     try {
       const stopTwitch = await startTwitch({
         channel: twitchChannel,
         onMessage(evt) {
-          const normalized = normalize({ platform: 'twitch', ...evt });
-          broadcast(normalized);
+          const normalized = normalize({ platform: 'twitch', ...evt })
+          broadcast(normalized)
         },
         onStatusChange(status: string, message?: string) {
           // Update local status
@@ -326,38 +326,38 @@ async function initializeAdapters(): Promise<void> {
             status: status as TwitchStatus['status'],
             message,
             channel: twitchChannel
-          };
+          }
           
           // Broadcast status changes to all connected clients
           broadcast({
             type: 'twitch-status',
             data: twitchStatus
-          } as WebSocketMessage);
+          } as WebSocketMessage)
           
-          if (DEBUG) console.log(`[twitch] Status: ${status}${message ? ` - ${message}` : ''}`);
+          if (DEBUG) console.log(`[twitch] Status: ${status}${message ? ` - ${message}` : ''}`)
         },
         debug: DEBUG
-      });
-      stopFns.push(stopTwitch);
+      })
+      stopFns.push(stopTwitch)
     } catch (error) {
-      console.error('[twitch] Failed to start:', (error as Error).message);
+      console.error('[twitch] Failed to start:', (error as Error).message)
       // Set error status
       twitchStatus = {
         status: 'error',
         message: (error as Error).message,
         channel: twitchChannel
-      };
+      }
       broadcast({
         type: 'twitch-status',
         data: twitchStatus
-      } as WebSocketMessage);
+      } as WebSocketMessage)
     }
   } else {
-    if (DEBUG) console.log('[twitch] skipped (missing TWITCH_CHANNEL env)');
+    if (DEBUG) console.log('[twitch] skipped (missing TWITCH_CHANNEL env)')
     twitchStatus = {
       status: 'stopped',
       message: 'No Twitch channel configured'
-    };
+    }
   }
 
   // TikTok
@@ -366,83 +366,83 @@ async function initializeAdapters(): Promise<void> {
       const stopTikTok = await startTikTok({
         username: process.env.TIKTOK_USERNAME,
         onMessage(evt) {
-          const normalized = normalize({ platform: 'tiktok', ...evt });
-          broadcast(normalized);
+          const normalized = normalize({ platform: 'tiktok', ...evt })
+          broadcast(normalized)
         },
         debug: DEBUG
-      });
-      stopFns.push(stopTikTok);
+      })
+      stopFns.push(stopTikTok)
     } catch (error) {
-      console.error('[tiktok] Failed to start:', (error as Error).message);
+      console.error('[tiktok] Failed to start:', (error as Error).message)
     }
   } else {
-    if (DEBUG) console.log('[tiktok] skipped (missing env)');
+    if (DEBUG) console.log('[tiktok] skipped (missing env)')
   }
 
   // YouTube - Initialize adapter but don't auto-start
   if (process.env.YT_CHANNEL_ID) {
-    console.log('[youtube] Initializing adapter for channel id:', process.env.YT_CHANNEL_ID);
+    console.log('[youtube] Initializing adapter for channel id:', process.env.YT_CHANNEL_ID)
     try {
       youTubeAdapter = await createYouTubeAdapter({
         channelId: process.env.YT_CHANNEL_ID,
         onMessage(evt: AdapterEvent) {
-          const normalized = normalize({ platform: 'youtube', ...evt });
-          broadcast(normalized);
+          const normalized = normalize({ platform: 'youtube', ...evt })
+          broadcast(normalized)
         },
         onStatusChange(status: string, message?: string) {
           // Broadcast status changes to all connected clients
           broadcast({
             type: 'youtube-status',
             data: { status, message }
-          } as WebSocketMessage);
+          } as WebSocketMessage)
           
-          if (DEBUG) console.log(`[youtube] Status: ${status}${message ? ` - ${message}` : ''}`);
+          if (DEBUG) console.log(`[youtube] Status: ${status}${message ? ` - ${message}` : ''}`)
         },
         debug: DEBUG
-      });
+      })
 
       // Add the stop function to our collection
-      stopFns.push(() => youTubeAdapter?.stop());
+      stopFns.push(() => youTubeAdapter?.stop())
       
-      console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.');
+      console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.')
     } catch (error) {
-      console.error('[youtube] Failed to initialize adapter:', (error as Error).message);
+      console.error('[youtube] Failed to initialize adapter:', (error as Error).message)
     }
   } else {
-    console.warn('[youtube] skipped: set YT_CHANNEL_ID in your environment to enable YouTube');
+    console.warn('[youtube] skipped: set YT_CHANNEL_ID in your environment to enable YouTube')
   }
 }
 
 // Start server
 server.listen(PORT, async () => {
-  console.log(`Multichat server running on http://localhost:${PORT}`);
-  console.log(`→ WebSocket endpoint: ws://localhost:${PORT}`);
+  console.log(`Multichat server running on http://localhost:${PORT}`)
+  console.log(`→ WebSocket endpoint: ws://localhost:${PORT}`)
   
   if (isDevelopment) {
-    console.log('→ Development mode: Access React app at http://localhost:5173');
-    console.log('→ For OBS: http://localhost:5173/?mode=public');
+    console.log('→ Development mode: Access React app at http://localhost:5173')
+    console.log('→ For OBS: http://localhost:5173/?mode=public')
   } else {
-    console.log('→ Production mode: React app served from this server');
-    console.log('→ For OBS: http://localhost:' + PORT + '/?mode=public');
+    console.log('→ Production mode: React app served from this server')
+    console.log('→ For OBS: http://localhost:' + PORT + '/?mode=public')
   }
   
   // Fetch badges first, then start adapters
-  await fetchTwitchBadges();
-  await initializeAdapters();
-});
+  await fetchTwitchBadges()
+  await initializeAdapters()
+})
 
 process.on('SIGINT', async () => {
-  console.log('\nShutting down...');
+  console.log('\nShutting down...')
   for (const stop of stopFns) {
     if (typeof stop === 'function') {
       try {
-        await stop();
+        await stop()
       } catch (error) {
-        console.error('Error during shutdown:', (error as Error).message);
+        console.error('Error during shutdown:', (error as Error).message)
       }
     }
   }
-  process.exit(0);
-});
+  process.exit(0)
+})
 
-export { broadcast, normalize };
+export { broadcast, normalize }
