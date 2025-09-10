@@ -2,39 +2,6 @@ import fetch from 'node-fetch';
 import tmi from 'tmi.js';
 import type { TwitchBadgeResponse } from '../../shared/types.js';
 
-const default_subscription_badge = 'https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1'
-
-// Fallback subscription badge URLs (common Twitch subscription badges)
-const FALLBACK_SUBSCRIPTION_BADGES: Record<string, string> = {
-  '0': 'https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1', // Default subscriber badge
-  '1': 'https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1',
-  '2': 'https://static-cdn.jtvnw.net/badges/v1/25a03e36-2bb2-4625-bd37-d6d9d406238d/1',
-  '3': 'https://static-cdn.jtvnw.net/badges/v1/e8984705-d091-4e54-8241-e53b30a84b0e/1',
-  '6': 'https://static-cdn.jtvnw.net/badges/v1/2d2485f6-d19b-4daa-8393-9493b019156b/1',
-  '9': 'https://static-cdn.jtvnw.net/badges/v1/b4e6b13a-a76f-4c56-87e1-9375a7aaa610/1',
-  '12': 'https://static-cdn.jtvnw.net/badges/v1/ed51a614-2c44-4a60-80b6-62908436b43a/1',
-  '18': default_subscription_badge,
-  '24': default_subscription_badge,
-  '30': default_subscription_badge,
-  '36': default_subscription_badge,
-  '42': default_subscription_badge,
-  '48': default_subscription_badge,
-  '54': default_subscription_badge,
-  '60': default_subscription_badge,
-  '66': default_subscription_badge,
-  '72': default_subscription_badge
-};
-
-// Manual configuration for custom subscription badges (can be extended)
-const CUSTOM_CHANNEL_BADGES: Record<string, Record<string, string>> = {
-  // Example: Add custom badges for specific channels
-  // 'channelname': {
-  //   '1': 'https://custom-badge-url-for-1-month.png',
-  //   '3': 'https://custom-badge-url-for-3-months.png',
-  //   // ... etc
-  // }
-};
-
 // Cache for channel user IDs to avoid repeated lookups
 const channelIdCache = new Map<string, string>();
 
@@ -282,26 +249,6 @@ async function fetchGlobalBadgesHelix(): Promise<TwitchBadgeResponse | null> {
  */
 export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadgeResponse | null> {
   console.log(`[twitch-api] Getting badges for channel: ${channel}`);
-  
-  // Check if we have manual custom badges for this channel first
-  if (CUSTOM_CHANNEL_BADGES[channel.toLowerCase()]) {
-    console.log(`[twitch-api] Using manual custom badges for ${channel}`);
-    const customData: TwitchBadgeResponse = {
-      badge_sets: {
-        subscriber: {
-          versions: Object.entries(CUSTOM_CHANNEL_BADGES[channel.toLowerCase()]).reduce((acc, [months, url]) => {
-            acc[months] = {
-              image_url_1x: url,
-              image_url_2x: url,
-              image_url_4x: url
-            };
-            return acc;
-          }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
-        }
-      }
-    };
-    return customData;
-  }
 
   try {
     // Step 1: Get broadcaster ID using Helix API first, fallback to TMI
@@ -314,7 +261,7 @@ export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadg
     
     if (!broadcasterId) {
       console.error(`[twitch-api] Could not get broadcaster ID for ${channel}, using fallback`);
-      return createFallbackBadgeResponse();
+      return null;
     }
 
     // Step 2: Try to fetch channel-specific badges
@@ -337,11 +284,6 @@ export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadg
           Object.assign(mergedBadges.badge_sets, channelBadges.badge_sets);
         }
         
-        // If still no subscriber badges, add fallback
-        if (!mergedBadges.badge_sets.subscriber) {
-          mergedBadges.badge_sets.subscriber = createFallbackSubscriberBadgeSet();
-        }
-        
         return mergedBadges;
       }
     }
@@ -352,42 +294,15 @@ export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadg
       return channelBadges;
     }
 
-    // Step 5: Last resort - use fallback
-    console.log(`[twitch-api] All API methods failed, using fallback badges for ${channel}`);
-    return createFallbackBadgeResponse();
-
   } catch (error) {
     console.error(`[twitch-api] Error in getTwitchBadgesPublic for ${channel}:`, (error as Error).message);
-    return createFallbackBadgeResponse();
+    return null;
   }
+  
+  // Default return if no other conditions are met
+  return null;
 }
 
-/**
- * Create fallback badge response
- */
-function createFallbackBadgeResponse(): TwitchBadgeResponse {
-  return {
-    badge_sets: {
-      subscriber: createFallbackSubscriberBadgeSet()
-    }
-  };
-}
-
-/**
- * Create fallback subscriber badge set
- */
-function createFallbackSubscriberBadgeSet() {
-  return {
-    versions: Object.entries(FALLBACK_SUBSCRIPTION_BADGES).reduce((acc, [months, url]) => {
-      acc[months] = {
-        image_url_1x: url,
-        image_url_2x: url,
-        image_url_4x: url
-      };
-      return acc;
-    }, {} as Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }>)
-  };
-}
 
 // Helper function to extract subscription badge URLs from the response
 export function extractSubscriptionBadges(badgeData: TwitchBadgeResponse): Record<string, string> {
@@ -402,10 +317,4 @@ export function extractSubscriptionBadges(badgeData: TwitchBadgeResponse): Recor
   }
   
   return subscriptionBadges;
-}
-
-// Helper function to add custom badges for a channel
-export function addCustomChannelBadges(channel: string, badges: Record<string, string>): void {
-  CUSTOM_CHANNEL_BADGES[channel.toLowerCase()] = badges;
-  console.log(`[twitch-api] Added custom badges for channel: ${channel}`);
 }
