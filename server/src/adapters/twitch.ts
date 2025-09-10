@@ -46,10 +46,6 @@ export async function startTwitch({
         subscriptionMonths = 1
       }
 
-      if (subscriptionMonths) {
-        console.log(`[twitch] User ${tags['display-name']} has ${subscriptionMonths} month subscription badge`)
-      }
-
       // Get all badge types
       const badgeList = tags.badges ? Object.keys(tags.badges) : []
 
