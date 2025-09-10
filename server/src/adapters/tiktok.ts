@@ -1,5 +1,7 @@
 import type { AdapterConfig, TikTokConfig } from '../../../shared/types'
-import { TikTokLiveConnection as BaseTikTokLiveConnection } from 'tiktok-live-connector'
+import { TikTokLiveConnection as TikTokLiveConnectionImpl } from 'tiktok-live-connector'
+
+type BaseTikTokLiveConnection = InstanceType<typeof TikTokLiveConnectionImpl>
 
 // Extend the TikTokLiveConnection type to include our custom event types
 interface TikTokLiveConnection extends BaseTikTokLiveConnection {
@@ -90,7 +92,7 @@ export async function createTikTokAdapter({
     updateStatus('connecting', `Connecting to TikTok user: ${username}`)
     
     try {
-      conn = new BaseTikTokLiveConnection(username) as TikTokLiveConnection
+      conn = new TikTokLiveConnectionImpl(username) as TikTokLiveConnection
 
       // Set up event handlers
       conn.on('chat', (data: TikTokChatEvent) => {
