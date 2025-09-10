@@ -82,7 +82,7 @@ app.post('/api/youtube/start', async (req, res) => {
     // Broadcast status update to all clients
     broadcast({
       type: 'youtube-status',
-      data: { status, action: 'start', success }
+      data: { status, success }
     } as WebSocketMessage)
     
     res.json({ success, status })
@@ -104,7 +104,7 @@ app.post('/api/youtube/stop', async (req, res) => {
     // Broadcast status update to all clients
     broadcast({
       type: 'youtube-status',
-      data: { status, action: 'stop' }
+      data: { status }
     } as WebSocketMessage)
     
     res.json({ success: true, status })
