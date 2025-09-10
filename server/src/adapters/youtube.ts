@@ -1,9 +1,9 @@
 import { LiveChat } from 'youtube-chat'
-import type { AdapterConfig, StopFunction, YouTubeConfig } from '../../../shared/types.js'
+import type { AdapterConfig, YouTubeConfig } from '../../../shared/types'
 
 interface YouTubeAdapterConfig extends AdapterConfig, YouTubeConfig {}
 
-interface YouTubeAdapterReturn extends StopFunction {
+interface YouTubeAdapterReturn {
   start: () => Promise<boolean>;
   stop: () => Promise<void>;
   isRunning: () => boolean;

@@ -8,11 +8,11 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
 
-import { startTwitch } from './adapters/twitch.js'
-import { startTikTok } from './adapters/tiktok.js'
-import { createYouTubeAdapter } from './adapters/youtube.js'
-import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js'
-import type { ChatMessage, Platform, AdapterEvent, StopFunction, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js'
+import { startTwitch } from './adapters/twitch'
+import { createTikTokAdapter } from './adapters/tiktok'
+import { createYouTubeAdapter } from './adapters/youtube'
+import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api'
+import type { ChatMessage, Platform, AdapterEvent, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -51,7 +51,7 @@ app.get('/api/badges/:channel', async (req, res) => {
   }
 })
 
-// Twitch status endpoint
+// Twitch status endpoint TODO: remove and use /api/status
 app.get('/api/twitch/status', (req, res) => {
   try {
     if (!twitchStatus) {
@@ -69,7 +69,7 @@ app.get('/api/twitch/status', (req, res) => {
   }
 })
 
-// YouTube control endpoints
+// YouTube start endpoint
 app.post('/api/youtube/start', async (req, res) => {
   try {
     if (!youTubeAdapter) {
@@ -92,28 +92,7 @@ app.post('/api/youtube/start', async (req, res) => {
   }
 })
 
-app.post('/api/youtube/stop', async (req, res) => {
-  try {
-    if (!youTubeAdapter) {
-      return res.status(400).json({ error: 'YouTube adapter not initialized' })
-    }
-    
-    await youTubeAdapter.stop()
-    const status = youTubeAdapter.getStatus()
-    
-    // Broadcast status update to all clients
-    broadcast({
-      type: 'youtube-status',
-      data: { status }
-    } as WebSocketMessage)
-    
-    res.json({ success: true, status })
-  } catch (error) {
-    console.error('[api] Error stopping YouTube:', (error as Error).message)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
+// YouTube status endpoint TODO: remove and use /api/status
 app.get('/api/youtube/status', (req, res) => {
   try {
     if (!youTubeAdapter) {
@@ -126,6 +105,61 @@ app.get('/api/youtube/status', (req, res) => {
     res.json({ status, isRunning })
   } catch (error) {
     console.error('[api] Error getting YouTube status:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// TikTok start endpoint
+app.post('/api/tiktok/start', async (req, res) => {
+  try {
+    if (!tiktokAdapter) {
+      return res.status(400).json({ error: 'TikTok adapter not initialized' })
+    }
+    
+    const success = await tiktokAdapter.start()
+    const status = tiktokAdapter.getStatus()
+    
+    // Broadcast status update to all clients
+    broadcast({
+      type: 'tiktok-status',
+      data: { status, success }
+    } as WebSocketMessage)
+    
+    res.json({ success, status })
+  } catch (error) {
+    console.error('[api] Error starting TikTok:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// TikTok status endpoint TODO: remove and use /api/status
+app.get('/api/tiktok/status', (req, res) => {
+  try {
+    if (!tiktokAdapter) {
+      return res.status(400).json({ error: 'TikTok adapter not initialized' })
+    }
+    
+    const status = tiktokAdapter.getStatus()
+    const isRunning = tiktokAdapter.isRunning()
+    
+    res.json({ status, isRunning })
+  } catch (error) {
+    console.error('[api] Error getting TikTok status:', (error as Error).message)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Status endpoint
+app.get('/api/status', (req, res) => {
+  try {
+    const status = {
+      twitch: twitchStatus,
+      youtube: { status: youTubeAdapter.getStatus(), isRunning: youTubeAdapter.isRunning() },
+      tiktok: { status: tiktokAdapter.getStatus(), isRunning: tiktokAdapter.isRunning() }
+    }
+    res.json(status)
+  } catch (error) {
+    console.error('[api] Error getting status:', (error as Error).message)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
@@ -197,6 +231,7 @@ const wss = new WebSocketServer({ server })
 let twitchBadges: TwitchBadgeResponse | null = null
 let subscriptionBadgeUrls: Record<string, string> = {}
 let youTubeAdapter: any = null // YouTube adapter instance
+let tiktokAdapter: any = null // TikTok adapter instance
 let twitchStatus: TwitchStatus | null = null // Twitch status
 
 // Function to fetch Twitch badges
@@ -300,21 +335,27 @@ wss.on('connection', (ws) => {
       data: { status, isRunning: youTubeAdapter.isRunning() }
     } as WebSocketMessage))
   }
+
+  // Send TikTok status if adapter exists
+  if (tiktokAdapter) {
+    const status = tiktokAdapter.getStatus()
+    ws.send(JSON.stringify({
+      type: 'tiktok-status',
+      data: { status, isRunning: tiktokAdapter.isRunning() }
+    } as WebSocketMessage))
+  }
   
   ws.on('close', () => {
     if (DEBUG) console.log('[ws] client disconnected')
   })
 })
 
-// Start adapters
-const stopFns: StopFunction[] = []
-
 async function initializeAdapters(): Promise<void> {
   // Twitch
   const twitchChannel = process.env.TWITCH_CHANNEL
   if (twitchChannel) {
     try {
-      const stopTwitch = await startTwitch({
+      await startTwitch({
         channel: twitchChannel,
         onMessage(evt) {
           const normalized = normalize({ platform: 'twitch', ...evt })
@@ -338,7 +379,6 @@ async function initializeAdapters(): Promise<void> {
         },
         debug: DEBUG
       })
-      stopFns.push(stopTwitch)
     } catch (error) {
       console.error('[twitch] Failed to start:', (error as Error).message)
       // Set error status
@@ -363,15 +403,23 @@ async function initializeAdapters(): Promise<void> {
   // TikTok
   if (process.env.TIKTOK_USERNAME) {
     try {
-      const stopTikTok = await startTikTok({
+      tiktokAdapter = await createTikTokAdapter({
         username: process.env.TIKTOK_USERNAME,
         onMessage(evt) {
           const normalized = normalize({ platform: 'tiktok', ...evt })
           broadcast(normalized)
         },
+        onStatusChange(status: string, message?: string) {
+          // Broadcast status changes to all connected clients
+          broadcast({
+            type: 'tiktok-status',
+            data: { status, message }
+          } as WebSocketMessage)
+          
+          if (DEBUG) console.log(`[tiktok] Status: ${status}${message ? ` - ${message}` : ''}`)
+        },
         debug: DEBUG
       })
-      stopFns.push(stopTikTok)
     } catch (error) {
       console.error('[tiktok] Failed to start:', (error as Error).message)
     }
@@ -400,9 +448,6 @@ async function initializeAdapters(): Promise<void> {
         },
         debug: DEBUG
       })
-
-      // Add the stop function to our collection
-      stopFns.push(() => youTubeAdapter?.stop())
       
       console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.')
     } catch (error) {
@@ -433,15 +478,7 @@ server.listen(PORT, async () => {
 
 process.on('SIGINT', async () => {
   console.log('\nShutting down...')
-  for (const stop of stopFns) {
-    if (typeof stop === 'function') {
-      try {
-        await stop()
-      } catch (error) {
-        console.error('Error during shutdown:', (error as Error).message)
-      }
-    }
-  }
+  // TODO: Add cleanup logic for adapters
   process.exit(0)
 })
 

@@ -1,5 +1,5 @@
 import tmi from 'tmi.js'
-import type { AdapterConfig, StopFunction, TwitchConfig } from '../../../shared/types.js'
+import type { AdapterConfig, TwitchConfig } from '../../../shared/types'
 
 interface TwitchAdapterConfig extends AdapterConfig, TwitchConfig {
   onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void;
@@ -10,7 +10,7 @@ export async function startTwitch({
   onMessage, 
   onStatusChange,
   debug = false 
-}: TwitchAdapterConfig): Promise<StopFunction> {
+}: TwitchAdapterConfig): Promise<void> {
   // tmi.js expects channel names without a leading '#'
   const normalizedChannel = channel.startsWith('#') ? channel.slice(1) : channel
   const client = new tmi.Client({
@@ -107,16 +107,5 @@ export async function startTwitch({
     console.error('[twitch] failed to connect to IRC:', (error as Error).message)
     onStatusChange?.('error', `Failed to connect to Twitch IRC: ${(error as Error).message}`)
     throw error
-  }
-
-  return async function stop(): Promise<void> {
-    try {
-      await client.disconnect()
-      if (debug) console.log('[twitch] disconnected from IRC')
-      onStatusChange?.('disconnected', 'Manually disconnected from Twitch IRC')
-    } catch (error) {
-      if (debug) console.error('[twitch] disconnect error:', (error as Error).message)
-      onStatusChange?.('error', `Disconnect error: ${(error as Error).message}`)
-    }
   }
 }

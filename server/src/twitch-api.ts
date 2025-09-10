@@ -1,6 +1,6 @@
 import fetch from 'node-fetch'
 import tmi from 'tmi.js'
-import type { TwitchBadgeResponse } from '../../shared/types.js'
+import type { TwitchBadgeResponse } from '../../shared/types'
 
 // Cache for channel user IDs to avoid repeated lookups
 const channelIdCache = new Map<string, string>()
