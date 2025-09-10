@@ -18,10 +18,9 @@ export interface PlatformFilters {
 }
 
 export interface YouTubeStatus {
-  status: 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying';
+  status: 'stopped' | 'connecting' | 'connected' | 'error';
   message?: string;
   isRunning?: boolean;
-  action?: 'start' | 'stop';
   success?: boolean;
 }
 
@@ -31,9 +30,16 @@ export interface TwitchStatus {
   channel?: string;
 }
 
+export interface TikTokStatus {
+  status: 'stopped' | 'connecting' | 'connected' | 'error';
+  message?: string;
+  isRunning?: boolean;
+  success?: boolean;
+}
+
 export interface WebSocketMessage {
-  type: 'chat' | 'connection' | 'error' | 'badges' | 'youtube-status' | 'twitch-status';
-  data?: ChatMessage | TwitchBadgeResponse | YouTubeStatus | TwitchStatus;
+  type: 'chat' | 'connection' | 'error' | 'badges' | 'youtube-status' | 'twitch-status' | 'tiktok-status';
+  data?: ChatMessage | TwitchBadgeResponse | YouTubeStatus | TwitchStatus | TikTokStatus;
   message?: string;
 }
 
@@ -42,7 +48,7 @@ export interface TwitchConfig {
 }
 
 export interface YouTubeConfig {
-  channelId: string; // UC... channel id for youtube-chat
+  channelId: string;
 }
 
 export interface TikTokConfig {
@@ -66,7 +72,7 @@ export interface YouTubeAdapterController {
   start: () => Promise<boolean>;
   stop: () => Promise<void>;
   isRunning: () => boolean;
-  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying';
+  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error';
 }
 
 export type StopFunction = () => Promise<void> | void;
