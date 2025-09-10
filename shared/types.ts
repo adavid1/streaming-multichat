@@ -75,8 +75,6 @@ export interface YouTubeAdapterController {
   getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error';
 }
 
-export type StopFunction = () => Promise<void> | void;
-
 export interface TwitchBadge {
   set_id: string;
   versions: Array<{
