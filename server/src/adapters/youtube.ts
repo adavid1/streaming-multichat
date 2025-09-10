@@ -1,5 +1,5 @@
 import { LiveChat } from 'youtube-chat'
-import type { AdapterConfig, YouTubeConfig } from '../../../shared/types'
+import type { AdapterConfig, YouTubeConfig } from '../../../shared/types.js'
 
 interface YouTubeAdapterConfig extends AdapterConfig, YouTubeConfig {}
 

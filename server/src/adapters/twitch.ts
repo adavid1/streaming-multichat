@@ -1,5 +1,5 @@
 import tmi from 'tmi.js'
-import type { AdapterConfig, TwitchConfig } from '../../../shared/types'
+import type { AdapterConfig, TwitchConfig } from '../../../shared/types.js'
 
 interface TwitchAdapterConfig extends AdapterConfig, TwitchConfig {
   onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void;

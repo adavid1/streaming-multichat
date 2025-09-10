@@ -8,11 +8,11 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
 
-import { startTwitch } from './adapters/twitch'
-import { createTikTokAdapter } from './adapters/tiktok'
-import { createYouTubeAdapter } from './adapters/youtube'
-import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api'
-import type { ChatMessage, Platform, AdapterEvent, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types'
+import { startTwitch } from './adapters/twitch.js'
+import { createTikTokAdapter } from './adapters/tiktok.js'
+import { createYouTubeAdapter } from './adapters/youtube.js'
+import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js'
+import type { ChatMessage, Platform, AdapterEvent, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)

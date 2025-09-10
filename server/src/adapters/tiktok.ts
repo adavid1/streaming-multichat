@@ -1,4 +1,4 @@
-import type { AdapterConfig, TikTokConfig } from '../../../shared/types'
+import type { AdapterConfig, TikTokConfig } from '../../../shared/types.js'
 import { TikTokLiveConnection as TikTokLiveConnectionImpl } from 'tiktok-live-connector'
 
 type BaseTikTokLiveConnection = InstanceType<typeof TikTokLiveConnectionImpl>
