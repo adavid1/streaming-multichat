@@ -7,7 +7,7 @@ interface YouTubeAdapterReturn extends StopFunction {
   start: () => Promise<boolean>;
   stop: () => Promise<void>;
   isRunning: () => boolean;
-  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying';
+  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error';
 }
 
 export async function createYouTubeAdapter({ 
@@ -17,15 +17,7 @@ export async function createYouTubeAdapter({
   onStatusChange
 }: YouTubeAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<YouTubeAdapterReturn> {
   let chat: InstanceType<typeof LiveChat> | null = null
-  let status: 'stopped' | 'connecting' | 'connected' | 'error' | 'retrying' = 'stopped'
-  let retryCount = 0
-  let retryTimeout: NodeJS.Timeout | null = null
-  let consecutiveErrors = 0
-  
-  const MAX_RETRY_ATTEMPTS = 10
-  const MAX_CONSECUTIVE_ERRORS = 15 // Stop after 15 consecutive 404s
-  const RETRY_DELAY_BASE = 30000 // 30 seconds base delay
-  const RETRY_DELAY_MAX = 120000 // 2 minutes max delay
+  let status: 'stopped' | 'connecting' | 'connected' | 'error'
 
   const updateStatus = (newStatus: typeof status, message?: string) => {
     if (status !== newStatus) {
@@ -35,19 +27,7 @@ export async function createYouTubeAdapter({
     }
   }
 
-  const calculateRetryDelay = (attempt: number): number => {
-    // Exponential backoff with jitter
-    const delay = Math.min(RETRY_DELAY_BASE * Math.pow(1.5, attempt), RETRY_DELAY_MAX)
-    const jitter = Math.random() * 0.3 * delay // Add 30% jitter
-    return Math.floor(delay + jitter)
-  }
-
-  const cleanup = () => {
-    if (retryTimeout) {
-      clearTimeout(retryTimeout)
-      retryTimeout = null
-    }
-    
+  const cleanup = () => {  
     if (chat) {
       try {
         chat.stop()
@@ -66,14 +46,12 @@ export async function createYouTubeAdapter({
 
     cleanup() // Clean up any existing connection
     
-    updateStatus('connecting', `Attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`)
+    updateStatus('connecting', `Connecting to channel: ${channelId}`)
     
     try {
       chat = new LiveChat({ channelId })
       
       chat.on('start', () => {
-        consecutiveErrors = 0 // Reset error counter on successful start
-        retryCount = 0 // Reset retry counter on successful connection
         updateStatus('connected', `Connected to channel: ${channelId}`)
         console.log('[youtube] Chat started successfully for channel:', channelId)
       })
@@ -81,36 +59,19 @@ export async function createYouTubeAdapter({
       chat.on('end', () => {       
         console.log('[youtube] Chat ended - stream likely finished')
         updateStatus('stopped', 'Stream ended')
-        
-        // Don't auto-retry when stream ends normally
-        if (consecutiveErrors < 5) {
-          scheduleRetry('Stream ended, will retry when stream starts again')
-        }
       })
 
       chat.on('error', (err: any) => {
-        consecutiveErrors++
         const errorMessage = err?.message || 'Unknown error'
         const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('Request failed with status code 404')
         
-        if (debug || !isNotFoundError) {
-          console.error(`[youtube] Chat error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, errorMessage)
-        }
-        
-        // If we get too many consecutive errors, stop trying
-        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          console.error(`[youtube] Too many consecutive ${isNotFoundError ? '404 errors' : 'errors'} (${consecutiveErrors}), stopping auto-retry`)
-          updateStatus('stopped', `Stream not found after ${consecutiveErrors} attempts`)
+        if (isNotFoundError) {
+          updateStatus('stopped', 'Stream not found')
           cleanup()
           return
         }
         
-        if (status !== 'stopped') {
-          updateStatus('retrying', `Error: ${errorMessage}`)
-          scheduleRetry(errorMessage)
-        } else {
-          updateStatus('error', errorMessage)
-        }
+        updateStatus('error', errorMessage)
       })
 
       chat.on('chat', (msg: any) => {
@@ -140,37 +101,15 @@ export async function createYouTubeAdapter({
       
     } catch (error) {
       const errorMessage = (error as Error).message
-      consecutiveErrors++
       
       if (debug) {
-        console.error(`[youtube] Start failed (attempt ${retryCount + 1}):`, errorMessage)
+        console.error(`[youtube] Start failed:`, errorMessage)
       }
       
-      if (retryCount < MAX_RETRY_ATTEMPTS && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
-        updateStatus('retrying', errorMessage)
-        scheduleRetry(errorMessage)
-      } else {
-        updateStatus('stopped', `Failed after ${retryCount} attempts: ${errorMessage}`)
-      }
+      updateStatus('stopped', errorMessage)
       
       return false
     }
-  }
-
-  const scheduleRetry = (reason: string) => {
-    if (retryTimeout) return // Already scheduled
-    
-    const delay = calculateRetryDelay(retryCount)
-    retryCount = Math.min(retryCount + 1, MAX_RETRY_ATTEMPTS)
-    
-    if (debug) {
-      console.log(`[youtube] Scheduling retry in ${Math.round(delay / 1000)}s (reason: ${reason})`)
-    }
-    
-    retryTimeout = setTimeout(async () => {
-      retryTimeout = null
-      await start()
-    }, delay)
   }
 
   const isRunning = (): boolean => {
