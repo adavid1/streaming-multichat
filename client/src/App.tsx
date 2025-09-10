@@ -64,6 +64,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // This runs once when the page loads (including F5 refresh)
     const fetchData = async () => {
+      if (!isConnected) return
       try {
         const baseUrl = import.meta.env.DEV ? 'http://localhost:8787' : ''
 

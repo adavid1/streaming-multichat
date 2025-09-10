@@ -9,7 +9,6 @@ services:
       - NODE_ENV=production
       - PORT=8787
       # Copy these from your .env file
-      - DEBUG=false
       - TWITCH_CHANNEL=${TWITCH_CHANNEL}
       - TWITCH_OAUTH=${TWITCH_OAUTH}
       - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}

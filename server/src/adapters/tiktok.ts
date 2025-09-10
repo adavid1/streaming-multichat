@@ -55,7 +55,6 @@ interface TikTokAdapterReturn {
 export async function createTikTokAdapter({ 
   username, 
   onMessage, 
-  debug = false,
   onStatusChange
 }: TikTokAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<TikTokAdapterReturn> {
   let conn: TikTokLiveConnection | null = null
@@ -65,7 +64,7 @@ export async function createTikTokAdapter({
     if (status !== newStatus) {
       status = newStatus
       onStatusChange?.(status, message)
-      if (debug) console.log(`[tiktok] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
+      console.log(`[tiktok] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
     }
   }
 
@@ -74,7 +73,7 @@ export async function createTikTokAdapter({
       try {
         conn.disconnect()
       } catch (error) {
-        if (debug) console.error('[tiktok] Error during cleanup:', (error as Error).message)
+        console.error('[tiktok] Error during cleanup:', (error as Error).message)
       }
       conn = null
       updateStatus('stopped')
@@ -83,7 +82,7 @@ export async function createTikTokAdapter({
 
   const start = async (): Promise<boolean> => {
     if (status === 'connecting' || status === 'connected') {
-      if (debug) console.log('[tiktok] Already connecting or connected')
+      console.log('[tiktok] Already connecting or connected')
       return status === 'connected'
     }
 
@@ -103,7 +102,7 @@ export async function createTikTokAdapter({
             raw: data
           })
         } catch (error) {
-          if (debug) console.error('[tiktok] chat processing error:', (error as Error).message)
+          console.error('[tiktok] chat processing error:', (error as Error).message)
         }
       })
 
@@ -125,26 +124,26 @@ export async function createTikTokAdapter({
             raw: data 
           })
         } catch (error) {
-          if (debug) console.error('[tiktok] gift processing error:', (error as Error).message)
+          console.error('[tiktok] gift processing error:', (error as Error).message)
         }
       })
 
       // Using type assertion to handle the event type
       conn.on('connected', (state: TikTokConnectionState) => {
         updateStatus('connected', `Connected to TikTok user: ${username}, viewers: ${state?.roomInfo?.viewerCount || 0}`)
-        if (debug) console.log('[tiktok] connected, viewerCount:', state?.roomInfo?.viewerCount)
+        console.log('[tiktok] connected, viewerCount:', state?.roomInfo?.viewerCount)
       })
 
       // Using type assertion to handle the event type
       conn.on('disconnected', () => {
         updateStatus('stopped', 'Disconnected from TikTok')
-        if (debug) console.log('[tiktok] disconnected')
+        console.log('[tiktok] disconnected')
       })
 
       conn.on('error', (error: Error) => {
         const errorMessage = error?.message || 'Unknown error'
         updateStatus('error', errorMessage)
-        if (debug) console.error('[tiktok] connection error:', errorMessage)
+        console.error('[tiktok] connection error:', errorMessage)
       })
 
       await conn.connect()

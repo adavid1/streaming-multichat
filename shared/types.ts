@@ -65,7 +65,6 @@ export interface AdapterEvent {
 
 export interface AdapterConfig {
   onMessage: (event: AdapterEvent) => void;
-  debug?: boolean;
 }
 
 export interface YouTubeAdapterController {

@@ -18,7 +18,6 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const PORT = parseInt(process.env.PORT || '8787', 10)
-const DEBUG = (process.env.DEBUG || 'false').toLowerCase() === 'true'
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // Express server
@@ -154,8 +153,8 @@ app.get('/api/status', (req, res) => {
   try {
     const status = {
       twitch: twitchStatus,
-      youtube: { status: youTubeAdapter.getStatus(), isRunning: youTubeAdapter.isRunning() },
-      tiktok: { status: tiktokAdapter.getStatus(), isRunning: tiktokAdapter.isRunning() }
+      youtube: youTubeAdapter ? { status: youTubeAdapter.getStatus(), isRunning: youTubeAdapter.isRunning() } : null,
+      tiktok: tiktokAdapter ? { status: tiktokAdapter.getStatus(), isRunning: tiktokAdapter.isRunning() } : null
     }
     res.json(status)
   } catch (error) {
@@ -271,7 +270,7 @@ function broadcast(msg: ChatMessage | WebSocketMessage): void {
       try {
         client.send(data)
       } catch (e) {
-        if (DEBUG) console.error('WS send error:', (e as Error).message)
+        console.error('WS send error:', (e as Error).message)
       }
     }
   }
@@ -299,7 +298,7 @@ function normalize({
 }
 
 wss.on('connection', (ws) => {
-  if (DEBUG) console.log('[ws] client connected')
+  console.log('[ws] client connected')
   
   // Send connection acknowledgment
   ws.send(JSON.stringify({ 
@@ -346,7 +345,7 @@ wss.on('connection', (ws) => {
   }
   
   ws.on('close', () => {
-    if (DEBUG) console.log('[ws] client disconnected')
+    console.log('[ws] client disconnected')
   })
 })
 
@@ -375,9 +374,8 @@ async function initializeAdapters(): Promise<void> {
             data: twitchStatus
           } as WebSocketMessage)
           
-          if (DEBUG) console.log(`[twitch] Status: ${status}${message ? ` - ${message}` : ''}`)
-        },
-        debug: DEBUG
+          console.log(`[twitch] Status: ${status}${message ? ` - ${message}` : ''}`)
+        }
       })
     } catch (error) {
       console.error('[twitch] Failed to start:', (error as Error).message)
@@ -393,7 +391,7 @@ async function initializeAdapters(): Promise<void> {
       } as WebSocketMessage)
     }
   } else {
-    if (DEBUG) console.log('[twitch] skipped (missing TWITCH_CHANNEL env)')
+    console.log('[twitch] skipped (missing TWITCH_CHANNEL env)')
     twitchStatus = {
       status: 'stopped',
       message: 'No Twitch channel configured'
@@ -416,15 +414,14 @@ async function initializeAdapters(): Promise<void> {
             data: { status, message }
           } as WebSocketMessage)
           
-          if (DEBUG) console.log(`[tiktok] Status: ${status}${message ? ` - ${message}` : ''}`)
-        },
-        debug: DEBUG
+          console.log(`[tiktok] Status: ${status}${message ? ` - ${message}` : ''}`)
+        }
       })
     } catch (error) {
       console.error('[tiktok] Failed to start:', (error as Error).message)
     }
   } else {
-    if (DEBUG) console.log('[tiktok] skipped (missing env)')
+    console.log('[tiktok] skipped (missing env)')
   }
 
   // YouTube - Initialize adapter but don't auto-start
@@ -444,9 +441,8 @@ async function initializeAdapters(): Promise<void> {
             data: { status, message }
           } as WebSocketMessage)
           
-          if (DEBUG) console.log(`[youtube] Status: ${status}${message ? ` - ${message}` : ''}`)
-        },
-        debug: DEBUG
+          console.log(`[youtube] Status: ${status}${message ? ` - ${message}` : ''}`)
+        }
       })
       
       console.log('[youtube] Adapter initialized. Use /api/youtube/start to begin chat monitoring.')

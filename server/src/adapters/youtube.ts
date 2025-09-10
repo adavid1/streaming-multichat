@@ -13,7 +13,6 @@ interface YouTubeAdapterReturn {
 export async function createYouTubeAdapter({ 
   channelId,
   onMessage, 
-  debug = false,
   onStatusChange
 }: YouTubeAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<YouTubeAdapterReturn> {
   let chat: InstanceType<typeof LiveChat> | null = null
@@ -23,7 +22,7 @@ export async function createYouTubeAdapter({
     if (status !== newStatus) {
       status = newStatus
       onStatusChange?.(status, message)
-      if (debug) console.log(`[youtube] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
+      console.log(`[youtube] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
     }
   }
 
@@ -32,7 +31,7 @@ export async function createYouTubeAdapter({
       try {
         chat.stop()
       } catch (error) {
-        if (debug) console.error('[youtube] Error during cleanup:', (error as Error).message)
+        console.error('[youtube] Error during cleanup:', (error as Error).message)
       }
       chat = null
     }
@@ -40,7 +39,7 @@ export async function createYouTubeAdapter({
 
   const start = async (): Promise<boolean> => {
     if (status === 'connecting' || status === 'connected') {
-      if (debug) console.log('[youtube] Already connecting or connected')
+      console.log('[youtube] Already connecting or connected')
       return status === 'connected'
     }
 
@@ -87,7 +86,7 @@ export async function createYouTubeAdapter({
             raw: msg
           })
         } catch (error) {
-          if (debug) console.error('[youtube] Message processing error:', (error as Error).message)
+          console.error('[youtube] Message processing error:', (error as Error).message)
         }
       })
 
@@ -102,7 +101,7 @@ export async function createYouTubeAdapter({
     } catch (error) {
       const errorMessage = (error as Error).message
       
-      if (debug) {
+      {
         console.error(`[youtube] Start failed:`, errorMessage)
       }
       

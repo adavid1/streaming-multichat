@@ -9,12 +9,11 @@ export async function startTwitch({
   channel,
   onMessage, 
   onStatusChange,
-  debug = false 
 }: TwitchAdapterConfig): Promise<void> {
   // tmi.js expects channel names without a leading '#'
   const normalizedChannel = channel.startsWith('#') ? channel.slice(1) : channel
   const client = new tmi.Client({
-    options: { debug },
+    options: {},
     channels: [normalizedChannel]
   })
 
@@ -47,7 +46,7 @@ export async function startTwitch({
         subscriptionMonths = 1
       }
 
-      if (debug && subscriptionMonths) {
+      if (subscriptionMonths) {
         console.log(`[twitch] User ${tags['display-name']} has ${subscriptionMonths} month subscription badge`)
       }
 
@@ -67,7 +66,7 @@ export async function startTwitch({
         }
       })
     } catch (error) {
-      if (debug) console.error('[twitch] message processing error:', (error as Error).message)
+      console.error('[twitch] message processing error:', (error as Error).message)
     }
   })
 
@@ -75,22 +74,22 @@ export async function startTwitch({
   onStatusChange?.('connecting', `Connecting to Twitch IRC for #${normalizedChannel}`)
 
   client.on('connected', (addr: string, port: number) => {
-    if (debug) console.log(`[twitch] connected to ${addr}:${port}`)
+    console.log(`[twitch] connected to ${addr}:${port}`)
     onStatusChange?.('connected', `Connected to Twitch IRC for #${normalizedChannel}`)
   })
 
   client.on('disconnected', (reason: string) => {
-    if (debug) console.log(`[twitch] disconnected: ${reason}`)
+    console.log(`[twitch] disconnected: ${reason}`)
     onStatusChange?.('disconnected', `Disconnected from Twitch IRC: ${reason}`)
   })
 
   client.on('connecting', (address: string, port: number) => {
-    if (debug) console.log(`[twitch] connecting to ${address}:${port}`)
+    console.log(`[twitch] connecting to ${address}:${port}`)
     onStatusChange?.('connecting', `Connecting to Twitch IRC: ${address}:${port}`)
   })
 
   client.on('reconnect', () => {
-    if (debug) console.log(`[twitch] reconnecting...`)
+    console.log(`[twitch] reconnecting...`)
     onStatusChange?.('connecting', 'Reconnecting to Twitch IRC...')
   })
 
@@ -102,7 +101,7 @@ export async function startTwitch({
 
   try {
     await client.connect()
-    if (debug) console.log('[twitch] successfully connected to IRC for channel:', `#${normalizedChannel}`)
+    console.log('[twitch] successfully connected to IRC for channel:', `#${normalizedChannel}`)
   } catch (error) {
     console.error('[twitch] failed to connect to IRC:', (error as Error).message)
     onStatusChange?.('error', `Failed to connect to Twitch IRC: ${(error as Error).message}`)
