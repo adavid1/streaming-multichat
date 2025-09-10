@@ -50,24 +50,6 @@ app.get('/api/badges/:channel', async (req, res) => {
   }
 })
 
-// Twitch status endpoint TODO: remove and use /api/status
-app.get('/api/twitch/status', (req, res) => {
-  try {
-    if (!twitchStatus) {
-      return res.json({ 
-        status: 'stopped', 
-        message: 'Twitch not configured or not started',
-        channel: process.env.TWITCH_CHANNEL || null
-      })
-    }
-    
-    res.json(twitchStatus)
-  } catch (error) {
-    console.error('[api] Error getting Twitch status:', (error as Error).message)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
 // YouTube start endpoint
 app.post('/api/youtube/start', async (req, res) => {
   try {
@@ -87,23 +69,6 @@ app.post('/api/youtube/start', async (req, res) => {
     res.json({ success, status })
   } catch (error) {
     console.error('[api] Error starting YouTube:', (error as Error).message)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
-// YouTube status endpoint TODO: remove and use /api/status
-app.get('/api/youtube/status', (req, res) => {
-  try {
-    if (!youTubeAdapter) {
-      return res.status(400).json({ error: 'YouTube adapter not initialized' })
-    }
-    
-    const status = youTubeAdapter.getStatus()
-    const isRunning = youTubeAdapter.isRunning()
-    
-    res.json({ status, isRunning })
-  } catch (error) {
-    console.error('[api] Error getting YouTube status:', (error as Error).message)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
@@ -131,32 +96,15 @@ app.post('/api/tiktok/start', async (req, res) => {
   }
 })
 
-// TikTok status endpoint TODO: remove and use /api/status
-app.get('/api/tiktok/status', (req, res) => {
-  try {
-    if (!tiktokAdapter) {
-      return res.status(400).json({ error: 'TikTok adapter not initialized' })
-    }
-    
-    const status = tiktokAdapter.getStatus()
-    const isRunning = tiktokAdapter.isRunning()
-    
-    res.json({ status, isRunning })
-  } catch (error) {
-    console.error('[api] Error getting TikTok status:', (error as Error).message)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
 // Status endpoint
 app.get('/api/status', (req, res) => {
   try {
-    const status = {
+    const statuses = {
       twitch: twitchStatus,
       youtube: youTubeAdapter ? { status: youTubeAdapter.getStatus(), isRunning: youTubeAdapter.isRunning() } : null,
       tiktok: tiktokAdapter ? { status: tiktokAdapter.getStatus(), isRunning: tiktokAdapter.isRunning() } : null
     }
-    res.json(status)
+    res.json(statuses)
   } catch (error) {
     console.error('[api] Error getting status:', (error as Error).message)
     res.status(500).json({ error: 'Internal server error' })
