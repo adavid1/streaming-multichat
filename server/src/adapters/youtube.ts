@@ -25,7 +25,7 @@ export async function createYouTubeAdapter({
   const MAX_RETRY_ATTEMPTS = 10
   const MAX_CONSECUTIVE_ERRORS = 15 // Stop after 15 consecutive 404s
   const RETRY_DELAY_BASE = 30000 // 30 seconds base delay
-  const RETRY_DELAY_MAX = 300000 // 5 minutes max delay
+  const RETRY_DELAY_MAX = 120000 // 2 minutes max delay
 
   const updateStatus = (newStatus: typeof status, message?: string) => {
     if (status !== newStatus) {
@@ -97,10 +97,10 @@ export async function createYouTubeAdapter({
           console.error(`[youtube] Chat error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, errorMessage)
         }
         
-        // If we get too many consecutive 404 errors, stop trying
-        if (isNotFoundError && consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          console.error(`[youtube] Too many consecutive errors (${consecutiveErrors}), stopping auto-retry`)
-          updateStatus('error', `Stream not found after ${consecutiveErrors} attempts`)
+        // If we get too many consecutive errors, stop trying
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          console.error(`[youtube] Too many consecutive ${isNotFoundError ? '404 errors' : 'errors'} (${consecutiveErrors}), stopping auto-retry`)
+          updateStatus('stopped', `Stream not found after ${consecutiveErrors} attempts`)
           cleanup()
           return
         }
@@ -150,7 +150,7 @@ export async function createYouTubeAdapter({
         updateStatus('retrying', errorMessage)
         scheduleRetry(errorMessage)
       } else {
-        updateStatus('error', `Failed after ${retryCount} attempts: ${errorMessage}`)
+        updateStatus('stopped', `Failed after ${retryCount} attempts: ${errorMessage}`)
       }
       
       return false
