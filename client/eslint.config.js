@@ -7,6 +7,9 @@ import prettierConfig from 'eslint-config-prettier'
 import tailwind from 'eslint-plugin-tailwindcss'
 
 export default [
+  {
+    ignores: ['**/node_modules', '**/dist'],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   prettierConfig, // Disable conflicting rules
