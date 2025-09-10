@@ -4,14 +4,15 @@ import { ChatMessage } from './components/ChatMessage'
 import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { YouTubeConnectionStatus } from './components/YouTubeConnectionStatus'
+import { TikTokConnectionStatus } from './components/TikTokConnectionStatus'
 import { TwitchConnectionStatus } from './components/TwitchConnectionStatus'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
 import { useYouTubeControls } from './hooks/useYouTubeControls'
-import { useTwitchControls } from './hooks/useTwitchControls'
+import { useTikTokControls } from './hooks/useTikTokControls'
 import { BadgeProvider } from './contexts/BadgeContext'
 import { EmoteProvider } from './contexts/EmoteContext'
-import type { PlatformFilters, YouTubeStatus, TwitchStatus } from '../../shared/types'
+import type { PlatformFilters, YouTubeStatus, TikTokStatus, TwitchStatus } from '../../shared/types'
 
 const App: React.FC = () => {
   const [filters, setFilters] = useState<PlatformFilters>({
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [youtubeStatus, setYoutubeStatus] = useState<YouTubeStatus | null>(null)
+  const [tiktokStatus, setTiktokStatus] = useState<TikTokStatus | null>(null)
   const [twitchStatus, setTwitchStatus] = useState<TwitchStatus | null>(null)
   const [isPublicMode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
@@ -38,9 +40,9 @@ const App: React.FC = () => {
   const { connectionStatus, isConnected, twitchBadges, lastWebSocketMessage } = useWebSocket()
   const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
   const { startYouTube, isLoading: youtubeLoading } = useYouTubeControls()
-  const { getTwitchStatus } = useTwitchControls()
+  const { startTikTok, isLoading: tiktokLoading } = useTikTokControls()
 
-  // Handle YouTube and Twitch status updates from WebSocket
+  // Handle status updates from WebSocket
   useEffect(() => {
     if (lastWebSocketMessage?.type === 'youtube-status' && lastWebSocketMessage.data) {
       const statusData = lastWebSocketMessage.data as YouTubeStatus
@@ -51,22 +53,44 @@ const App: React.FC = () => {
       const statusData = lastWebSocketMessage.data as TwitchStatus
       setTwitchStatus(statusData)
     }
+
+    if (lastWebSocketMessage?.type === 'tiktok-status' && lastWebSocketMessage.data) {
+      const statusData = lastWebSocketMessage.data as TikTokStatus
+      setTiktokStatus(statusData)
+    }
   }, [lastWebSocketMessage])
 
-  // Fetch initial Twitch status when connected
+  // Fetch initial status when connected
   useEffect(() => {
-    if (isConnected && !twitchStatus) {
-      getTwitchStatus()
-        .then((status) => {
-          if (status) {
-            setTwitchStatus(status)
-          }
+    // This runs once when the page loads (including F5 refresh)
+    const fetchData = async () => {
+      try {
+        const baseUrl = import.meta.env.DEV ? 'http://localhost:8787' : ''
+
+        const response = await fetch(`${baseUrl}/api/status`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         })
-        .catch((error) => {
-          console.error('Failed to fetch initial Twitch status:', error)
-        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+          throw new Error(errorData.error || `HTTP ${response.status}`)
+        }
+
+        const statusData = await response.json()
+
+        setYoutubeStatus(statusData.youtube)
+        setTiktokStatus(statusData.tiktok)
+        setTwitchStatus(statusData.twitch)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
     }
-  }, [isConnected, twitchStatus, getTwitchStatus])
+
+    fetchData()
+  }, [isConnected])
 
   // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {
@@ -107,6 +131,14 @@ const App: React.FC = () => {
     }
   }, [startYouTube])
 
+  const handleTikTokStart = useCallback(async () => {
+    try {
+      await startTikTok()
+    } catch (error) {
+      console.error('Failed to start TikTok:', error)
+    }
+  }, [startTikTok])
+
   // Set up body classes for styling
   useEffect(() => {
     document.body.className = isPublicMode ? 'public' : 'private'
@@ -137,6 +169,13 @@ const App: React.FC = () => {
                     status={youtubeStatus}
                     onStart={handleYouTubeStart}
                     disabled={youtubeLoading}
+                  />
+                )}
+                {isConnected && (
+                  <TikTokConnectionStatus
+                    status={tiktokStatus}
+                    onStart={handleTikTokStart}
+                    disabled={tiktokLoading}
                   />
                 )}
                 <button
@@ -206,6 +245,11 @@ const App: React.FC = () => {
                     {youtubeStatus?.status === 'stopped' && (
                       <p className="mt-1 text-sm">
                         YouTube monitoring is stopped - click the YouTube icon to start
+                      </p>
+                    )}
+                    {tiktokStatus?.status === 'stopped' && (
+                      <p className="mt-1 text-sm">
+                        TikTok monitoring is stopped - click the TikTok icon to start
                       </p>
                     )}
                   </div>

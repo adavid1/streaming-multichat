@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { Loader2, AlertTriangle, CheckCircle, Square } from 'lucide-react'
-import { FaYoutube } from 'react-icons/fa'
-import type { YouTubeStatus } from '../../../shared/types'
+import { FaTiktok } from 'react-icons/fa'
+import type { TikTokStatus } from '../../../shared/types'
 
-interface YouTubeConnectionStatusProps {
-  status: YouTubeStatus | null
+interface TikTokConnectionStatusProps {
+  status: TikTokStatus | null
   onStart: () => Promise<void>
   disabled?: boolean
 }
@@ -22,30 +22,30 @@ const statusConfig: Record<'stopped' | 'connecting' | 'connected' | 'error', Sta
     icon: Square,
     color: 'text-gray-400',
     bgColor: 'bg-gray-400/20',
-    label: 'YouTube Offline',
+    label: 'TikTok Offline',
   },
   connecting: {
     icon: Loader2,
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-400/20',
-    label: 'YouTube Connecting...',
+    label: 'TikTok Connecting...',
     animate: true,
   },
   connected: {
     icon: CheckCircle,
     color: 'text-green-400',
     bgColor: 'bg-green-400/20',
-    label: 'YouTube Connected',
+    label: 'TikTok Connected',
   },
   error: {
     icon: AlertTriangle,
     color: 'text-red-400',
     bgColor: 'bg-red-400/20',
-    label: 'YouTube Error',
+    label: 'TikTok Error',
   },
 }
 
-export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = ({
+export const TikTokConnectionStatus: React.FC<TikTokConnectionStatusProps> = ({
   status,
   onStart,
   disabled = false,
@@ -63,7 +63,7 @@ export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = (
     try {
       await onStart()
     } catch (error) {
-      console.error('Failed to toggle YouTube connection:', error)
+      console.error('Failed to toggle TikTok connection:', error)
     } finally {
       setIsLoading(false)
     }
@@ -73,7 +73,7 @@ export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = (
     if (disabled || isLoading) return config.label
 
     if (currentStatus === 'stopped') {
-      return `Start YouTube monitoring`
+      return `Start TikTok monitoring`
     } else if (status?.message && currentStatus === 'error') {
       // Truncate long error messages for tooltip
       const truncatedMessage =
@@ -96,8 +96,8 @@ export const YouTubeConnectionStatus: React.FC<YouTubeConnectionStatusProps> = (
         ${currentStatus === 'stopped' ? 'cursor-pointer hover:bg-gray-400/30 hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50' : 'cursor-default'}
       `}
     >
-      {/* YouTube brand icon */}
-      <FaYoutube className="h-3.5 w-3.5 text-red-500" />
+      {/* TikTok brand icon */}
+      <FaTiktok className="h-3.5 w-3.5 text-red-500" />
 
       {/* Status icon */}
       <Icon className={`h-3.5 w-3.5 ${config.animate || isLoading ? 'animate-spin' : ''}`} />
