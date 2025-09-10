@@ -1,37 +1,62 @@
-import { WebcastPushConnection } from 'tiktok-live-connector'
 import type { AdapterConfig, StopFunction, TikTokConfig } from '../../../shared/types.js'
+import { TikTokLiveConnection as BaseTikTokLiveConnection } from 'tiktok-live-connector'
 
-interface TikTokAdapterConfig extends AdapterConfig, TikTokConfig {}
+// Extend the TikTokLiveConnection type to include our custom event types
+interface TikTokLiveConnection extends BaseTikTokLiveConnection {
+  on(event: 'chat', listener: (data: TikTokChatEvent) => void): this
+  on(event: 'gift', listener: (data: TikTokGiftEvent) => void): this
+  on(event: 'connected', listener: (state: TikTokConnectionState) => void): this
+  on(event: 'disconnected', listener: () => void): this
+}
 
-interface TikTokChatData {
+// Define interfaces for the TikTok Live events
+interface TikTokChatEvent {
   nickname?: string;
   uniqueId?: string;
   comment?: string;
-  profilePictureUrl?: string;
-  [key: string]: any;
+  user?: {
+    nickname?: string;
+    uniqueId?: string;
+  };
 }
 
-interface TikTokGiftData {
+interface TikTokGiftEvent {
+  giftType?: number;
+  repeatEnd?: boolean;
+  giftName?: string;
+  repeatCount?: number;
   uniqueId?: string;
-  gift?: {
+  user?: {
+    nickname?: string;
+    uniqueId?: string;
+  };
+  giftInfo?: {
     name?: string;
   };
-  repeatCount?: number;
-  [key: string]: any;
 }
+
+interface TikTokConnectionState {
+  roomInfo?: {
+    viewerCount?: number;
+  };
+}
+
+interface TikTokAdapterConfig extends AdapterConfig, TikTokConfig {}
 
 export async function startTikTok({ 
   username, 
   onMessage, 
   debug = false 
 }: TikTokAdapterConfig): Promise<StopFunction> {
-  const conn = new WebcastPushConnection(username)
+  // Create connection
+  const conn = new BaseTikTokLiveConnection(username) as TikTokLiveConnection
 
-  conn.on('chat', (data: TikTokChatData) => {
+  // Set up event handlers
+  conn.on('chat', (data: TikTokChatEvent) => {
     try {
       onMessage({
-        username: data?.nickname || data?.uniqueId || 'unknown',
-        message: data?.comment || '',
+        username: data.user?.nickname || data.user?.uniqueId || data.nickname || data.uniqueId || 'unknown',
+        message: data.comment || '',
         badges: [],
         raw: data
       })
@@ -40,11 +65,19 @@ export async function startTikTok({
     }
   })
 
-  conn.on('gift', (data: TikTokGiftData) => {
+  // Using type assertion to handle the event type
+  conn.on('gift', (data: TikTokGiftEvent) => {
     try {
-      const text = `${data.uniqueId || 'Someone'} sent ${data.gift?.name || 'a gift'} x${data.repeatCount || 1}`
+      // Only process gifts that are not part of a streak or are the final gift in a streak
+      if (data.giftType === 1 && !data.repeatEnd) return
+      
+      const giftName = data.giftInfo?.name || data.giftName || 'a gift'
+      const count = data.repeatCount || 1
+      const username = data.user?.nickname || data.user?.uniqueId || data.uniqueId || 'Someone'
+      const text = `${username} sent ${giftName} x${count}`
+      
       onMessage({ 
-        username: data.uniqueId || 'unknown', 
+        username,
         message: text, 
         badges: ['gift'], 
         raw: data 
@@ -54,16 +87,18 @@ export async function startTikTok({
     }
   })
 
-  conn.on('connected', (state: any) => {
+  // Using type assertion to handle the event type
+  conn.on('connected', (state: TikTokConnectionState) => {
     if (debug) console.log('[tiktok] connected, viewerCount:', state?.roomInfo?.viewerCount)
   })
 
+  // Using type assertion to handle the event type
   conn.on('disconnected', () => {
     if (debug) console.log('[tiktok] disconnected')
   })
 
   try {
-    const state = await conn.connect()
+    await conn.connect()
     if (debug) console.log('[tiktok] connection established')
   } catch (error) {
     console.error('[tiktok] connect error:', (error as Error).message)
