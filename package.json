@@ -8,7 +8,10 @@
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "dev:test": "cd server && npm run dev:test",
-    "build": "cd client && npm run build",
+    "build": "npm run build:shared && npm run build:client && npm run build:server",
+    "build:shared": "cd server && npm run build:shared",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
     "preview": "cd client && npm run preview",
     "server": "cd server && npm start",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install"
