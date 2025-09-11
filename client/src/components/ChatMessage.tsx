@@ -2,7 +2,7 @@ import React from 'react'
 import { FaTwitch, FaYoutube } from 'react-icons/fa'
 import { SiTiktok } from 'react-icons/si'
 import { useBadges } from '../contexts/BadgeContext'
-import { useEmotes } from '../contexts/EmoteContext'
+import { useTwitchEmotes } from '../contexts/EmoteContext'
 import { getBadgeUrl, getBadgeInfo } from '../utils/badgeUtils'
 import type { ChatMessage as ChatMessageType } from '../../../shared/types'
 
@@ -31,9 +31,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   isNew = false,
   isExpiring = false,
 }) => {
-  const { username, message: text, badges, platform, color, ts, raw } = message
+  const { username, message: text, badges, platform, color, ts, raw, customEmojis } = message
+  console.log(badges)
   const { getSubscriptionBadgeUrl, getCheerBadgeUrl } = useBadges()
-  const { emotes } = useEmotes()
+  const { twitchEmotes } = useTwitchEmotes()
 
   // Extract subscription months from Twitch raw data
   const getSubscriptionMonths = (): number | null => {
@@ -49,24 +50,43 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const subscriptionMonths = getSubscriptionMonths()
 
-  // Function to render a word as either an emote image or text
   const renderWord = (word: string, index: number) => {
-    // Check if the word matches a Twitch global emote
-    const emote = emotes.get(word)
+    // Check if the word matches a YouTube custom emoji
+    if (platform === 'youtube' && customEmojis) {
+      console.log(customEmojis)
+      const ytEmote = customEmojis.find((emoji) => emoji.text === word)
 
-    if (emote) {
-      return (
-        <img
-          key={index}
-          src={emote.images.url_1x}
-          alt={emote.name}
-          title={emote.name}
-          className="inline-block size-6 object-contain align-middle"
-        />
-      )
+      if (ytEmote) {
+        return (
+          <img
+            key={index}
+            src={ytEmote.url}
+            alt={ytEmote.text}
+            title={ytEmote.text}
+            className="inline-block size-6 object-contain align-middle"
+          />
+        )
+      }
     }
 
-    // Return as regular text if no emote match
+    // Check if the word matches a Twitch global twitchEmote
+    if (platform === 'twitch') {
+      const twitchEmote = twitchEmotes.get(word)
+
+      if (twitchEmote) {
+        return (
+          <img
+            key={index}
+            src={twitchEmote.images.url_1x}
+            alt={twitchEmote.name}
+            title={twitchEmote.name}
+            className="inline-block size-6 object-contain align-middle"
+          />
+        )
+      }
+    }
+
+    // Return as regular text if no twitchEmote match
     return <span key={index}>{word}</span>
   }
 

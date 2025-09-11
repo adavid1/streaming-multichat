@@ -231,7 +231,8 @@ function normalize({
   message, 
   badges = [], 
   color, 
-  raw = {} 
+  raw = {}, 
+  customEmojis 
 }: { platform: Platform } & AdapterEvent): ChatMessage {
   return {
     id: uuidv4(),
@@ -241,7 +242,8 @@ function normalize({
     message,
     badges,
     color: color || null,
-    raw
+    raw,
+    customEmojis
   }
 }
 

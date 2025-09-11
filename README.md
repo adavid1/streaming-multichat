@@ -144,7 +144,7 @@ interface ChatMessage {
 - `useWebSocket()` - WebSocket connection management with badge fetching
 - `useChatMessages()` - Chat message state management with auto-expiration
 - `useBadges()` - Twitch badge context for subscription and cheer badges
-- `useEmotes()` - Twitch emote context for global emote replacement
+- `useTwitchEmotes()` - Twitch emote context for global emote replacement
 
 ### Components
 

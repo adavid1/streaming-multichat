@@ -9,6 +9,7 @@ export interface ChatMessage {
   badges: string[];
   color: string | null;
   raw: Record<string, any>;
+  customEmojis?: CustomEmoji[];
 }
 
 export interface PlatformFilters {
@@ -55,12 +56,18 @@ export interface TikTokConfig {
   username: string;
 }
 
+export interface CustomEmoji {
+  text: string;
+  url: string;
+}
+
 export interface AdapterEvent {
   username: string;
   message: string;
   badges?: string[];
   color?: string | null;
   raw?: Record<string, any>;
+  customEmojis?: CustomEmoji[];
 }
 
 export interface AdapterConfig {

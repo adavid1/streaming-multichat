@@ -1,5 +1,6 @@
 import { LiveChat } from 'youtube-chat'
-import type { AdapterConfig, YouTubeConfig } from '../../../shared/types.js'
+import { ChatItem, MessageItem } from 'youtube-chat/dist/types/data.js'
+import type { AdapterConfig, CustomEmoji, YouTubeConfig } from '../../../shared/types.js'
 
 interface YouTubeAdapterConfig extends AdapterConfig, YouTubeConfig {}
 
@@ -60,7 +61,7 @@ export async function createYouTubeAdapter({
         updateStatus('stopped', 'Stream ended')
       })
 
-      chat.on('error', (err: any) => {
+      chat.on('error', (err: Error) => {
         const errorMessage = err?.message || 'Unknown error'
         const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('Request failed with status code 404')
         
@@ -73,17 +74,27 @@ export async function createYouTubeAdapter({
         updateStatus('error', errorMessage)
       })
 
-      chat.on('chat', (msg: any) => {
+      chat.on('chat', (msg: ChatItem) => {
         try {
           const text = Array.isArray(msg.message) 
-            ? msg.message.map((m: any) => m.text).join('') 
+            ? msg.message.map((m: MessageItem) => {
+              if ('text' in m) {
+                return m.text
+              } else if ('emojiText' in m) {
+                return m.emojiText || ''
+              }
+              return ''
+            }).join('')
             : (msg.message || '')
+
+          const badges = msg.author?.badge?.label ? [msg.author?.badge?.label] : undefined
             
           onMessage({
             username: msg.author?.name || 'unknown',
             message: text,
-            badges: (msg.author?.badges || []).map((b: any) => b.title).filter(Boolean),
-            raw: msg
+            badges,
+            raw: msg,
+            customEmojis: _getCustomEmojis(msg.message)
           })
         } catch (error) {
           console.error('[youtube] Message processing error:', (error as Error).message)
@@ -124,4 +135,22 @@ export async function createYouTubeAdapter({
   })
 
   return controller
+}
+
+/**
+ * Extract custom emojis from a message
+ * @param {MessageItem[]} msg - The message items to extract custom emojis from
+ * @returns {CustomEmoji[]} An array of custom emojis
+ */
+function _getCustomEmojis(msg: MessageItem[]): CustomEmoji[] {
+  const customEmojis: CustomEmoji[] = []
+  for (const m of msg) {
+    if ('emojiText' in m && m.isCustomEmoji === true) {
+      customEmojis.push({
+        text: m.emojiText,
+        url: m.url
+      })
+    }
+  }
+  return customEmojis
 }

@@ -18,7 +18,7 @@ interface TwitchEmotesData {
 }
 
 interface EmoteContextType {
-  emotes: Map<string, TwitchEmote>
+  twitchEmotes: Map<string, TwitchEmote>
   isLoading: boolean
   error: string | null
 }
@@ -26,7 +26,7 @@ interface EmoteContextType {
 const EmoteContext = createContext<EmoteContextType | undefined>(undefined)
 
 export const EmoteProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [emotes, setEmotes] = useState<Map<string, TwitchEmote>>(new Map())
+  const [twitchEmotes, setTwitchEmotes] = useState<Map<string, TwitchEmote>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,7 +48,7 @@ export const EmoteProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           emoteMap.set(emote.name, emote)
         })
 
-        setEmotes(emoteMap)
+        setTwitchEmotes(emoteMap)
         setError(null)
       } catch (err) {
         console.error('Error loading Twitch emotes:', err)
@@ -62,14 +62,16 @@ export const EmoteProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [])
 
   return (
-    <EmoteContext.Provider value={{ emotes, isLoading, error }}>{children}</EmoteContext.Provider>
+    <EmoteContext.Provider value={{ twitchEmotes, isLoading, error }}>
+      {children}
+    </EmoteContext.Provider>
   )
 }
 
-export const useEmotes = (): EmoteContextType => {
+export const useTwitchEmotes = (): EmoteContextType => {
   const context = useContext(EmoteContext)
   if (context === undefined) {
-    throw new Error('useEmotes must be used within an EmoteProvider')
+    throw new Error('useTwitchEmotes must be used within an EmoteProvider')
   }
   return context
 }
