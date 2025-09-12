@@ -1,4 +1,4 @@
-# 🎮 Multichat - Universal Streaming Chat Overlay
+# 🎮 Multichat - Universal Streaming Chat
 
 A powerful, real-time chat overlay application that unifies **Twitch**, **YouTube Live**, and **TikTok Live** chat into a single interface. Perfect for streamers who want to engage with their audience across multiple platforms simultaneously.
 
@@ -74,9 +74,9 @@ TIKTOK_USERNAME=your_tiktok_username
 ```bash
 npm run dev
 ```
-- React app: http://localhost:5173
 - Server/WebSocket: http://localhost:8787
-- OBS overlay: http://localhost:5173/?mode=public
+- OBS overlay: http://localhost:5173/
+- OBS Streamer view: http://localhost:5173/private
 
 ### 4. Production Build
 ```bash
