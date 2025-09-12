@@ -1,0 +1,75 @@
+version: 2
+updates:
+  # Root package.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "@octocat"  # Replace with your GitHub username
+    labels:
+      - "dependencies"
+      - "automated"
+
+  # Server dependencies
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "@octocat"  # Replace with your GitHub username
+    labels:
+      - "dependencies"
+      - "server"
+      - "automated"
+
+  # Client dependencies
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "@octocat"  # Replace with your GitHub username
+    labels:
+      - "dependencies"
+      - "client"
+      - "automated"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "@octocat"  # Replace with your GitHub username
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "@octocat"  # Replace with your GitHub username
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
