@@ -9,7 +9,7 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "@octocat"  # Replace with your GitHub username
+      - "@adavid1"
     labels:
       - "dependencies"
       - "automated"
@@ -23,7 +23,7 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "@octocat"  # Replace with your GitHub username
+      - "@adavid1"
     labels:
       - "dependencies"
       - "server"
@@ -38,7 +38,7 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "@octocat"  # Replace with your GitHub username
+      - "@adavid1"
     labels:
       - "dependencies"
       - "client"
@@ -53,7 +53,7 @@ updates:
       time: "10:00"
     open-pull-requests-limit: 3
     reviewers:
-      - "@octocat"  # Replace with your GitHub username
+      - "@adavid1"
     labels:
       - "dependencies"
       - "docker"
@@ -68,7 +68,7 @@ updates:
       time: "10:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "@octocat"  # Replace with your GitHub username
+      - "@adavid1"
     labels:
       - "dependencies"
       - "github-actions"
