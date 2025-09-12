@@ -6,6 +6,7 @@ A powerful, real-time chat overlay application that unifies **Twitch**, **YouTub
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
 
 ## ✨ Features
 
