@@ -5,6 +5,15 @@ interface TwitchAdapterConfig extends AdapterConfig, TwitchConfig {
   onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void;
 }
 
+interface Tags {
+  'display-name': string;
+  username: string;
+  color: string;
+  badges: Record<string, string>;
+  'badge-info': Record<string, string>;
+  subscriber: string;
+}
+
 export async function startTwitch({ 
   channel,
   onMessage, 
@@ -17,7 +26,7 @@ export async function startTwitch({
     channels: [normalizedChannel]
   })
 
-  client.on('message', (channel: string, tags: any, message: string, self: boolean) => {
+  client.on('message', (channel: string, tags: Tags, message: string, self: boolean) => {
     if (self) return
     
     try {
