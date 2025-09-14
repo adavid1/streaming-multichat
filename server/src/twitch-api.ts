@@ -2,6 +2,52 @@ import fetch from 'node-fetch'
 import tmi from 'tmi.js'
 import type { TwitchBadgeResponse } from '../../shared/types.js'
 
+// Type definitions for Twitch API responses
+interface TwitchHelixResponse<T> {
+  data: T[]
+}
+
+interface TwitchUser {
+  id: string
+  login: string
+  display_name: string
+  type: string
+  broadcaster_type: string
+  description: string
+  profile_image_url: string
+  offline_image_url: string
+  view_count: number
+  created_at: string
+}
+
+interface TwitchBadgeVersion {
+  id: string
+  image_url_1x: string
+  image_url_2x: string
+  image_url_4x: string
+  title?: string
+  description?: string
+  click_action?: string
+  click_url?: string
+}
+
+interface TwitchBadge {
+  set_id: string
+  versions: TwitchBadgeVersion[]
+  title?: string
+  description?: string
+}
+
+interface TwitchRoomState {
+  'room-id'?: string
+  'subs-only'?: boolean
+  slow?: boolean
+  'followers-only'?: number | boolean
+  'r9k'?: boolean
+  'emote-only'?: boolean
+  'display-name'?: string
+}
+
 // Cache for channel user IDs to avoid repeated lookups
 const channelIdCache = new Map<string, string>()
 
@@ -35,7 +81,7 @@ async function getBroadcasterIdFromHelix(channel: string): Promise<string | null
       return null
     }
 
-    const data = await response.json() as any
+    const data = await response.json() as TwitchHelixResponse<TwitchUser>
     
     if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
       console.error(`[twitch-api] No user found for channel: ${channel}`)
@@ -77,7 +123,7 @@ async function getBroadcasterIdFromTMI(channel: string): Promise<string | null> 
       }
     }, 10000)
 
-    client.on('roomstate', (channelName: string, state: any) => {
+    client.on('roomstate', (channelName: string, state: TwitchRoomState) => {
       if (resolved) return
       
       const userId = state['room-id']
@@ -140,7 +186,7 @@ async function fetchChannelBadgesHelix(broadcasterId: string): Promise<TwitchBad
       return null
     }
 
-    const data = await response.json() as any
+    const data = await response.json() as TwitchHelixResponse<TwitchBadge>
     
     if (!data.data || !Array.isArray(data.data)) {
       console.log('[twitch-api] Invalid response format from Helix API')
@@ -208,7 +254,7 @@ async function fetchGlobalBadgesHelix(): Promise<TwitchBadgeResponse | null> {
       return null
     }
 
-    const data = await response.json() as any
+    const data = await response.json() as TwitchHelixResponse<TwitchBadge>
     
     if (!data.data || !Array.isArray(data.data)) {
       return null
