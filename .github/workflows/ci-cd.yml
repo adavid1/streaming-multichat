@@ -45,7 +45,7 @@ jobs:
         run: cd client && npm run lint
 
       - name: Type check shared
-        run: cd shared && npm install typescript && npx tsc --noEmit
+        run: cd shared && npx tsc --noEmit
 
       - name: Type check server
         run: cd server && npx tsc --noEmit

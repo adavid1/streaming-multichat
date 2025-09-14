@@ -1,0 +1,16 @@
+{
+    "name": "@multichat/shared",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/types.js",
+    "types": "./dist/types.d.ts",
+    "scripts": {
+      "build": "tsc --build",
+      "clean": "rm -rf dist",
+      "dev": "tsc --build --watch"
+    },
+    "devDependencies": {
+      "typescript": "^5.3.3"
+    }
+  }
