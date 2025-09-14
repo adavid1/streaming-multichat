@@ -48,7 +48,7 @@ interface TikTokConnectionState {
 
 interface TikTokAdapterConfig extends AdapterConfig, TikTokConfig {}
 
-interface TikTokAdapterReturn {
+export interface TikTokAdapterReturn {
   start: () => Promise<boolean>
   isRunning: () => boolean
   getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error'

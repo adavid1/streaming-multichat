@@ -12,7 +12,8 @@ import { startTwitch } from './adapters/twitch.js'
 import { createTikTokAdapter } from './adapters/tiktok.js'
 import { createYouTubeAdapter } from './adapters/youtube.js'
 import { getTwitchBadgesPublic, extractSubscriptionBadges } from './twitch-api.js'
-import type { ChatMessage, Platform, AdapterEvent, WebSocketMessage, TwitchBadgeResponse, TwitchStatus } from '../../shared/types.js'
+import type { ChatMessage, Platform, AdapterEvent, WebSocketMessage, TwitchBadgeResponse, TwitchStatus, YouTubeAdapterController } from '../../shared/types.js'
+import type { TikTokAdapterReturn } from './adapters/tiktok.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -177,8 +178,8 @@ const wss = new WebSocketServer({ server })
 // Global storage
 let twitchBadges: TwitchBadgeResponse | null = null
 let subscriptionBadgeUrls: Record<string, string> = {}
-let youTubeAdapter: any = null // YouTube adapter instance
-let tiktokAdapter: any = null // TikTok adapter instance
+let youTubeAdapter: YouTubeAdapterController | null = null // YouTube adapter instance
+let tiktokAdapter: TikTokAdapterReturn | null = null // TikTok adapter instance
 let twitchStatus: TwitchStatus | null = null // Twitch status
 
 // Function to fetch Twitch badges
