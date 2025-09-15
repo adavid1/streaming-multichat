@@ -1,7 +1,6 @@
 # Multi-stage build for multichat app
 FROM node:18-alpine AS base
 WORKDIR /app
-RUN npm install -g typescript
 
 # -------------------------
 # Install dependencies
@@ -10,11 +9,13 @@ RUN npm install -g typescript
 
   # Copy package files
   COPY package*.json ./
+  COPY shared/package*.json ./shared/
   COPY server/package*.json ./server/
   COPY client/package*.json ./client/
   
   # Install all dependencies (including dev)
   RUN npm ci --ignore-scripts
+  RUN cd shared && npm ci --ignore-scripts
   RUN cd server && npm ci --ignore-scripts
   RUN cd client && npm ci --ignore-scripts
 
