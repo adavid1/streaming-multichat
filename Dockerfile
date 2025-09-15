@@ -30,10 +30,12 @@ WORKDIR /app
   
   # Copy node_modules from deps stage
   COPY --from=deps /app/node_modules ./node_modules
+  COPY --from=deps /app/shared/node_modules ./shared/node_modules
   COPY --from=deps /app/server/node_modules ./server/node_modules
   COPY --from=deps /app/client/node_modules ./client/node_modules
   
-  # Ensure devDependencies exist for server
+  # Ensure devDependencies exist for shared & server
+  RUN cd shared && npm install typescript --save-dev
   RUN cd server && npm install typescript --save-dev
   
   # 1️⃣ Build shared first
