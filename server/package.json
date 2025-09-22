@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
-    "@stylistic/eslint-plugin": "^5.3.1",
+    "@stylistic/eslint-plugin": "^5.4.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.5",
