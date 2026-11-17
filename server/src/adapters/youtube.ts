@@ -1,156 +1,255 @@
-import { LiveChat } from 'youtube-chat'
-import { ChatItem, MessageItem } from 'youtube-chat/dist/types/data.js'
-import type { AdapterConfig, CustomEmoji, YouTubeConfig } from '../../../shared/types.js'
+import { Innertube, Log, YTNodes } from 'youtubei.js'
+import type { Helpers, YT } from 'youtubei.js'
+import type { CustomEmoji, YouTubeConfig } from '../../../shared/types.js'
+import {
+  type Connector,
+  type ConnectorOptions,
+  backoff,
+  createDedupe,
+  createPoller,
+  createStatusHolder,
+  errorMessage,
+} from './connector.js'
 
-interface YouTubeAdapterConfig extends AdapterConfig, YouTubeConfig {}
+// youtubei.js logs a lot of harmless parser warnings when YouTube adds new UI nodes
+Log.setLevel(Log.Level.NONE)
 
-interface YouTubeAdapterReturn {
-  start: () => Promise<boolean>;
-  stop: () => Promise<void>;
-  isRunning: () => boolean;
-  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error';
+type LiveChat = ReturnType<YT.VideoInfo['getLiveChat']>
+type ChatAction = Helpers.YTNode
+
+interface YouTubeConnectorOptions extends ConnectorOptions, YouTubeConfig {
+  /** How often we check whether the channel is live (ms). */
+  pollIntervalMs?: number
 }
 
-export async function createYouTubeAdapter({ 
+/** While connected, re-check /live periodically to follow a new broadcast. */
+const WATCHDOG_INTERVAL_MS = 120_000
+const MAX_BACKOFF_MS = 5 * 60_000
+/** A chat that ends this soon after connecting is considered unavailable (disabled, restricted...). */
+const QUICK_END_MS = 90_000
+const MAX_UNAVAILABLE_BACKOFF_MS = 10 * 60_000
+
+export function createYouTubeConnector({
   channelId,
-  onMessage, 
-  onStatusChange
-}: YouTubeAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<YouTubeAdapterReturn> {
-  let chat: InstanceType<typeof LiveChat> | null = null
-  let status: 'stopped' | 'connecting' | 'connected' | 'error'
+  pollIntervalMs = 20_000,
+  onMessage,
+  onStatusChange,
+}: YouTubeConnectorOptions): Connector {
+  const status = createStatusHolder('youtube', channelId, onStatusChange)
+  const isDuplicate = createDedupe()
 
-  const updateStatus = (newStatus: typeof status, message?: string) => {
-    if (status !== newStatus) {
-      status = newStatus
-      onStatusChange?.(status, message)
-      console.log(`[youtube] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
+  let client: Innertube | null = null
+  let chat: LiveChat | null = null
+  let videoId: string | null = null
+  let failures = 0
+  /** Consecutive chats that ended right after connecting */
+  let quickEnds = 0
+
+  const getClient = async (): Promise<Innertube> => {
+    if (!client) {
+      client = await Innertube.create({ retrieve_player: false, lang: 'fr', location: 'FR' })
     }
+    return client
   }
 
-  const cleanup = () => {  
-    if (chat) {
+  /** Returns the currently *live* video of the channel, or null. */
+  const findLive = async (): Promise<{ id: string; info: YT.VideoInfo } | null> => {
+    const yt = await getClient()
+    const endpoint = await yt.resolveURL(`https://www.youtube.com/channel/${channelId}/live`)
+    const id = endpoint?.payload?.videoId as string | undefined
+    if (!id) return null // /live redirects to the channel page: nothing live
+
+    const info = await yt.getInfo(id)
+    // Ignore scheduled (upcoming) broadcasts and finished lives (replays)
+    if (!info.basic_info.is_live) return null
+    return { id, info }
+  }
+
+  const disconnectChat = () => {
+    const current = chat
+    chat = null
+    videoId = null
+    if (current) {
+      current.removeAllListeners()
       try {
-        chat.stop()
+        current.stop()
       } catch (error) {
-        console.error('[youtube] Error during cleanup:', (error as Error).message)
+        console.warn('[youtube] error while stopping chat:', errorMessage(error))
       }
-      chat = null
     }
   }
 
-  const start = async (): Promise<boolean> => {
-    if (status === 'connecting' || status === 'connected') {
-      console.log('[youtube] Already connecting or connected')
-      return status === 'connected'
-    }
-
-    cleanup() // Clean up any existing connection
-    
-    updateStatus('connecting', `Connecting to channel: ${channelId}`)
-    
+  const check = async (): Promise<number> => {
     try {
-      chat = new LiveChat({ channelId })
-      
-      chat.on('start', () => {
-        updateStatus('connected', `Connected to channel: ${channelId}`)
-        console.log('[youtube] Chat started successfully for channel:', channelId)
-      })
-
-      chat.on('end', () => {       
-        console.log('[youtube] Chat ended - stream likely finished')
-        updateStatus('stopped', 'Stream ended')
-      })
-
-      chat.on('error', (err: Error) => {
-        const errorMessage = err?.message || 'Unknown error'
-        const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('Request failed with status code 404')
-        
-        if (isNotFoundError) {
-          updateStatus('stopped', 'Stream not found')
-          cleanup()
-          return
-        }
-        
-        updateStatus('error', errorMessage)
-      })
-
-      chat.on('chat', (msg: ChatItem) => {
-        try {
-          const text = Array.isArray(msg.message) 
-            ? msg.message.map((m: MessageItem) => {
-              if ('text' in m) {
-                return m.text
-              } else if ('emojiText' in m) {
-                return m.emojiText || ''
-              }
-              return ''
-            }).join('')
-            : (msg.message || '')
-
-          const badges = msg.author?.badge?.label ? [msg.author?.badge?.label] : undefined
-            
-          onMessage({
-            username: msg.author?.name || 'unknown',
-            message: text,
-            badges,
-            raw: msg,
-            customEmojis: _getCustomEmojis(msg.message)
-          })
-        } catch (error) {
-          console.error('[youtube] Message processing error:', (error as Error).message)
-        }
-      })
-
-      const success = await chat.start()
-      
-      if (!success) {
-        throw new Error('Failed to start YouTube chat - stream may be offline')
+      const live = await findLive()
+      failures = 0
+      if (live && (live.id !== videoId || !chat)) {
+        connectChat(live.id, live.info)
+      } else if (!live && !chat) {
+        status.set('waiting', 'Waiting for the stream to go live')
       }
-      
-      return true
-      
+      return chat ? WATCHDOG_INTERVAL_MS : pollIntervalMs
     } catch (error) {
-      const errorMessage = (error as Error).message
-      
-      {
-        console.error(`[youtube] Start failed:`, errorMessage)
+      failures++
+      client = null // start from a fresh session next time
+      if (chat) {
+        console.warn('[youtube] watchdog check failed:', errorMessage(error))
+        return WATCHDOG_INTERVAL_MS
       }
-      
-      updateStatus('stopped', errorMessage)
-      
-      return false
+      status.set('error', `Live check failed (${errorMessage(error)}), retrying automatically`)
+      return backoff(pollIntervalMs, failures, MAX_BACKOFF_MS)
     }
   }
 
-  const isRunning = (): boolean => {
-    return status === 'connected' || status === 'connecting'
+  const poller = createPoller(check)
+
+  const connectChat = (id: string, info: YT.VideoInfo) => {
+    disconnectChat()
+    const title = info.basic_info.title ?? id
+    const connectedAt = Date.now()
+    status.set('connecting', `Live found: ${title}`, id)
+
+    const liveChat = info.getLiveChat()
+    chat = liveChat
+    videoId = id
+
+    liveChat.on('start', () => {
+      if (chat !== liveChat) return
+      status.set('connected', `Live: ${title}`, id)
+    })
+
+    liveChat.on('chat-update', (action) => {
+      if (chat !== liveChat) return
+      try {
+        handleAction(action)
+      } catch (error) {
+        console.error('[youtube] message processing error:', errorMessage(error))
+      }
+    })
+
+    liveChat.on('error', (error) => {
+      // youtubei.js retries by itself and emits 'end' when it gives up
+      console.warn('[youtube] live chat error:', errorMessage(error))
+    })
+
+    liveChat.on('end', () => {
+      if (chat !== liveChat) return
+      disconnectChat()
+      quickEnds = Date.now() - connectedAt < QUICK_END_MS ? quickEnds + 1 : 0
+
+      if (quickEnds > 0) {
+        // The live is still there but its chat can't be read: back off instead of looping
+        const delay = backoff(60_000, quickEnds - 1, MAX_UNAVAILABLE_BACKOFF_MS)
+        status.set(
+          'error',
+          `Live chat unavailable (disabled or restricted?), retrying in ${Math.round(delay / 1000)}s`,
+          id,
+        )
+        poller.schedule(delay)
+      } else {
+        status.set('waiting', 'Stream ended - waiting for the next live')
+        // Check again soon: if the stream was just restarted, reconnect quickly
+        poller.schedule(5_000)
+      }
+    })
+
+    liveChat.start()
   }
 
-  const getStatus = () => status
+  const handleAction = (action: ChatAction) => {
+    if (!action.is(YTNodes.AddChatItemAction)) return
+    const item = action.item
 
-  const controller = Object.assign({
-    start,
-    isRunning,
-    getStatus
-  })
+    if (item.is(YTNodes.LiveChatTextMessage)) {
+      emit(item.id, item.author, item.message)
+    } else if (item.is(YTNodes.LiveChatPaidMessage)) {
+      emit(item.id, item.author, item.message, `Super Chat ${item.purchase_amount}`)
+    } else if (item.is(YTNodes.LiveChatPaidSticker)) {
+      emit(item.id, item.author, undefined, `Super Sticker ${item.purchase_amount}`)
+    } else if (item.is(YTNodes.LiveChatMembershipItem)) {
+      const header = item.header_primary_text?.toString() || item.header_subtext?.toString()
+      emit(item.id, item.author, item.message, header || 'New member')
+    }
+  }
 
-  return controller
+  type Author = YTNodes.LiveChatTextMessage['author']
+  type Text = YTNodes.LiveChatTextMessage['message']
+
+  const emit = (id: string, author: Author, text?: Text, highlight?: string) => {
+    if (isDuplicate(id)) return
+    const { message, customEmojis } = parseText(text)
+    if (!message && !highlight) return
+
+    const badges = (author?.badges ?? [])
+      .map((badge) => (badge.is(YTNodes.LiveChatAuthorBadge) ? badge.tooltip : null))
+      .filter((label): label is string => Boolean(label))
+
+    onMessage({
+      id: `yt-${id}`,
+      username: author?.name || 'unknown',
+      message,
+      badges,
+      customEmojis,
+      highlight,
+      raw: {
+        authorId: author?.id,
+        isModerator: author?.is_moderator,
+        isOwner: author?.is_creator,
+        videoId,
+      },
+    })
+  }
+
+  return {
+    start() {
+      status.set('waiting', 'Checking whether the channel is live...')
+      poller.start()
+    },
+    async stop() {
+      poller.stop()
+      disconnectChat()
+    },
+    async refresh() {
+      // Manual reconnect: drop the current chat and check from scratch.
+      // If a check is already running, the poller runs another one right after.
+      disconnectChat()
+      failures = 0
+      quickEnds = 0
+      status.set('waiting', 'Manual refresh: checking whether the channel is live...')
+      await poller.trigger()
+    },
+    getStatus: status.get,
+  }
 }
 
 /**
- * Extract custom emojis from a message
- * @param {MessageItem[]} msg - The message items to extract custom emojis from
- * @returns {CustomEmoji[]} An array of custom emojis
+ * Converts YouTube text runs into plain text. Custom (channel) emojis are
+ * replaced by their shortcut surrounded by spaces, and returned in
+ * `customEmojis` so the client can render them as images.
  */
-function _getCustomEmojis(msg: MessageItem[]): CustomEmoji[] {
+function parseText(text?: { runs?: unknown[]; toString(): string }): {
+  message: string
+  customEmojis: CustomEmoji[]
+} {
   const customEmojis: CustomEmoji[] = []
-  for (const m of msg) {
-    if ('emojiText' in m && m.isCustomEmoji === true) {
-      customEmojis.push({
-        text: m.emojiText,
-        url: m.url
-      })
+  if (!text) return { message: '', customEmojis }
+  if (!Array.isArray(text.runs)) return { message: text.toString(), customEmojis }
+
+  const parts = text.runs.map((run) => {
+    const r = run as {
+      text?: string
+      emoji?: { is_custom?: boolean; shortcuts?: string[]; image?: { url: string }[] }
     }
-  }
-  return customEmojis
+    if (r.emoji?.is_custom) {
+      const shortcut = r.emoji.shortcuts?.[0] || r.text || ''
+      const url = r.emoji.image?.[r.emoji.image.length - 1]?.url ?? r.emoji.image?.[0]?.url
+      if (shortcut && url && !customEmojis.some((e) => e.text === shortcut)) {
+        customEmojis.push({ text: shortcut, url })
+      }
+      return ` ${shortcut} `
+    }
+    return r.text ?? ''
+  })
+
+  return { message: parts.join('').replace(/\s{2,}/g, ' ').trim(), customEmojis }
 }

@@ -1,115 +1,95 @@
 import tmi from 'tmi.js'
-import type { AdapterConfig, TwitchConfig } from '../../../shared/types.js'
-
-interface TwitchAdapterConfig extends AdapterConfig, TwitchConfig {
-  onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void;
-}
+import type { TwitchConfig } from '../../../shared/types.js'
+import { type Connector, type ConnectorOptions, createStatusHolder, errorMessage } from './connector.js'
 
 interface Tags {
-  'display-name': string;
-  username: string;
-  color: string;
-  badges: Record<string, string>;
-  'badge-info': Record<string, string>;
-  subscriber: string;
+  id?: string
+  'display-name'?: string
+  username?: string
+  color?: string
+  badges?: Record<string, string> | null
+  'badge-info'?: Record<string, string> | null
+  emotes?: Record<string, string[]> | null
 }
 
-export async function startTwitch({ 
+/**
+ * Twitch chat is read anonymously over IRC: it works whether or not the
+ * stream is live, and tmi.js reconnects automatically.
+ */
+export function createTwitchConnector({
   channel,
-  onMessage, 
+  onMessage,
   onStatusChange,
-}: TwitchAdapterConfig): Promise<void> {
-  // tmi.js expects channel names without a leading '#'
-  const normalizedChannel = channel.startsWith('#') ? channel.slice(1) : channel
+}: ConnectorOptions & TwitchConfig): Connector {
+  const normalizedChannel = channel.replace(/^#/, '').toLowerCase()
+  const status = createStatusHolder('twitch', normalizedChannel, onStatusChange)
+
   const client = new tmi.Client({
-    options: {},
-    channels: [normalizedChannel]
+    options: { skipUpdatingEmotesets: true },
+    connection: { reconnect: true, secure: true, maxReconnectInterval: 30_000 },
+    channels: [normalizedChannel],
   })
 
-  client.on('message', (channel: string, tags: Tags, message: string, self: boolean) => {
+  client.on('message', (_channel: string, tags: Tags, message: string, self: boolean) => {
     if (self) return
-    
     try {
-      // Extract subscription months from badges with multiple methods
-      let subscriptionMonths: number | null = null
-      
-      // Method 1: From tags.badges.subscriber (most reliable)
-      if (tags.badges && tags.badges.subscriber) {
-        const months = parseInt(tags.badges.subscriber, 10)
-        if (!isNaN(months)) {
-          subscriptionMonths = months
-        }
-      }
-      
-      // Method 2: From badge-info (newer TMI.js versions)
-      if (!subscriptionMonths && tags['badge-info'] && tags['badge-info'].subscriber) {
-        const months = parseInt(tags['badge-info'].subscriber, 10)
-        if (!isNaN(months)) {
-          subscriptionMonths = months
-        }
-      }
-      
-      // Method 3: From subscriber tag (legacy)
-      if (!subscriptionMonths && tags.subscriber === '1' && !subscriptionMonths) {
-        // Default to 1 month if we know they're a subscriber but don't have months
-        subscriptionMonths = 1
-      }
-
-      // Get all badge types
-      const badgeList = tags.badges ? Object.keys(tags.badges) : []
-
+      const subscriberMonths = parseInt(tags['badge-info']?.subscriber ?? tags.badges?.subscriber ?? '', 10)
       onMessage({
+        id: tags.id ? `tw-${tags.id}` : undefined,
         username: tags['display-name'] || tags.username || 'unknown',
         message,
-        badges: badgeList,
+        badges: tags.badges ? Object.keys(tags.badges) : [],
         color: tags.color || null,
-        raw: { 
-          channel, 
+        raw: {
           tags,
-          badges: tags.badges, // Include raw badges object
-          subscriptionMonths // Include subscription months in raw data
-        }
+          badges: tags.badges,
+          subscriptionMonths: Number.isNaN(subscriberMonths) ? null : subscriberMonths,
+        },
       })
     } catch (error) {
-      console.error('[twitch] message processing error:', (error as Error).message)
+      console.error('[twitch] message processing error:', errorMessage(error))
     }
   })
 
-  // Set connecting status immediately when starting connection
-  onStatusChange?.('connecting', `Connecting to Twitch IRC for #${normalizedChannel}`)
+  client.on('connecting', () => status.set('connecting', 'Connecting to Twitch IRC...'))
+  client.on('reconnect', () => status.set('connecting', 'Reconnecting to Twitch IRC...'))
+  client.on('connected', () => status.set('connected', `Connected to #${normalizedChannel}`))
+  client.on('disconnected', (reason: string) =>
+    status.set('connecting', `Disconnected (${reason}), reconnecting...`),
+  )
 
-  client.on('connected', (addr: string, port: number) => {
-    console.log(`[twitch] connected to ${addr}:${port}`)
-    onStatusChange?.('connected', `Connected to Twitch IRC for #${normalizedChannel}`)
-  })
+  let running = false
 
-  client.on('disconnected', (reason: string) => {
-    console.log(`[twitch] disconnected: ${reason}`)
-    onStatusChange?.('disconnected', `Disconnected from Twitch IRC: ${reason}`)
-  })
+  // tmi.js reconnects by itself (reconnect: true, unlimited attempts), even when
+  // the very first connection fails: never call connect() while it is
+  // reconnecting, or a second socket is opened and every message is duplicated.
+  const connect = async () => {
+    try {
+      await client.connect()
+    } catch (error) {
+      status.set('error', `Twitch IRC connection failed (${errorMessage(error)}), retrying...`)
+    }
+  }
 
-  client.on('connecting', (address: string, port: number) => {
-    console.log(`[twitch] connecting to ${address}:${port}`)
-    onStatusChange?.('connecting', `Connecting to Twitch IRC: ${address}:${port}`)
-  })
-
-  client.on('reconnect', () => {
-    console.log(`[twitch] reconnecting...`)
-    onStatusChange?.('connecting', 'Reconnecting to Twitch IRC...')
-  })
-
-  // Handle connection errors
-  client.on('error', (err: Error) => {
-    console.error('[twitch] IRC connection error:', err.message)
-    onStatusChange?.('error', `Twitch IRC error: ${err.message}`)
-  })
-
-  try {
-    await client.connect()
-    console.log('[twitch] successfully connected to IRC for channel:', `#${normalizedChannel}`)
-  } catch (error) {
-    console.error('[twitch] failed to connect to IRC:', (error as Error).message)
-    onStatusChange?.('error', `Failed to connect to Twitch IRC: ${(error as Error).message}`)
-    throw error
+  return {
+    start() {
+      if (running) return
+      running = true
+      void connect()
+    },
+    async stop() {
+      running = false
+      try {
+        await client.disconnect()
+      } catch {
+        // already disconnected
+      }
+    },
+    async refresh() {
+      // Only act when the client is really idle: closed, with no reconnect pending
+      if (!running || client.readyState() !== 'CLOSED' || client.reconnecting) return
+      await connect()
+    },
+    getStatus: status.get,
   }
 }

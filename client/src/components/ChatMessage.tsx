@@ -31,8 +31,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   isNew = false,
   isExpiring = false,
 }) => {
-  const { username, message: text, badges, platform, color, ts, raw, customEmojis } = message
-  console.log(badges)
+  const {
+    username,
+    message: text,
+    badges,
+    platform,
+    color,
+    ts,
+    raw,
+    customEmojis,
+    highlight,
+  } = message
   const { getSubscriptionBadgeUrl, getCheerBadgeUrl } = useBadges()
   const { twitchEmotes } = useTwitchEmotes()
 
@@ -53,7 +62,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const renderWord = (word: string, index: number) => {
     // Check if the word matches a YouTube custom emoji
     if (platform === 'youtube' && customEmojis) {
-      console.log(customEmojis)
       const ytEmote = customEmojis.find((emoji) => emoji.text === word)
 
       if (ytEmote) {
@@ -210,6 +218,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       <span className="font-bold" style={{ color: color || undefined }}>
         {username}
       </span>
+
+      {/* Super Chat, gift, membership... */}
+      {highlight && (
+        <span className="rounded bg-amber-500/90 px-1.5 text-sm font-semibold text-black">
+          {highlight}
+        </span>
+      )}
 
       {/* Message text */}
       {text.split(' ').map((word, index) => renderWord(word, index))}

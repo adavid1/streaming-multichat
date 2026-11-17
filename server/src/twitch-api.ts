@@ -1,366 +1,103 @@
-import fetch from 'node-fetch'
-import tmi from 'tmi.js'
 import type { TwitchBadgeResponse } from '../../shared/types.js'
 
-// Type definitions for Twitch API responses
-interface TwitchHelixResponse<T> {
-  data: T[]
-}
-
-interface TwitchUser {
-  id: string
-  login: string
-  display_name: string
-  type: string
-  broadcaster_type: string
-  description: string
-  profile_image_url: string
-  offline_image_url: string
-  view_count: number
-  created_at: string
-}
-
-interface TwitchBadgeVersion {
-  id: string
-  image_url_1x: string
-  image_url_2x: string
-  image_url_4x: string
-  title?: string
-  description?: string
-  click_action?: string
-  click_url?: string
-}
-
-interface TwitchBadge {
+interface HelixBadge {
   set_id: string
-  versions: TwitchBadgeVersion[]
-  title?: string
-  description?: string
+  versions: { id: string; image_url_1x: string; image_url_2x: string; image_url_4x: string }[]
 }
 
-interface TwitchRoomState {
-  'room-id'?: string
-  'subs-only'?: boolean
-  slow?: boolean
-  'followers-only'?: number | boolean
-  'r9k'?: boolean
-  'emote-only'?: boolean
-  'display-name'?: string
+interface Credentials {
+  clientId: string
+  token: string
 }
 
-// Cache for channel user IDs to avoid repeated lookups
-const channelIdCache = new Map<string, string>()
+let appToken: { value: string; expiresAt: number } | null = null
 
 /**
- * Get broadcaster ID for a channel using Twitch Helix API with OAuth
+ * Twitch Helix credentials, in order of preference:
+ * 1. TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET: app access token, renewed automatically (recommended)
+ * 2. TWITCH_CLIENT_ID + TWITCH_OAUTH: user token (expires, must be renewed by hand)
  */
-async function getBroadcasterIdFromHelix(channel: string): Promise<string | null> {
-  try {
-    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko'
-    const oauthToken = process.env.TWITCH_OAUTH
-    
-    if (!oauthToken) {
-      console.error('[twitch-api] TWITCH_OAUTH environment variable is required')
-      return null
+async function getCredentials(): Promise<Credentials | null> {
+  const clientId = process.env.TWITCH_CLIENT_ID
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET
+  if (!clientId) return null
+
+  if (clientSecret) {
+    if (appToken && appToken.expiresAt > Date.now() + 60_000) {
+      return { clientId, token: appToken.value }
     }
-    
-    const url = `https://api.twitch.tv/helix/users?login=${channel.toLowerCase()}`
-    
-    console.log(`[twitch-api] Fetching broadcaster ID for ${channel}`)
-    
-    const response = await fetch(url, {
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
-        'Accept': 'application/json'
-      }
+    const response = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }),
     })
-
-    if (!response.ok) {
-      console.error(`[twitch-api] Failed to get broadcaster ID: ${response.status} ${response.statusText}`)
-      return null
-    }
-
-    const data = await response.json() as TwitchHelixResponse<TwitchUser>
-    
-    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
-      console.error(`[twitch-api] No user found for channel: ${channel}`)
-      return null
-    }
-
-    const broadcasterId = data.data[0].id
-    channelIdCache.set(channel, broadcasterId)
-    console.log(`[twitch-api] Got broadcaster ID for ${channel}: ${broadcasterId}`)
-    
-    return broadcasterId
-  } catch (error) {
-    console.error(`[twitch-api] Error getting broadcaster ID for ${channel}:`, (error as Error).message)
-    return null
-  }
-}
-
-/**
- * Get broadcaster ID for a channel using TMI.js (fallback method)
- */
-async function getBroadcasterIdFromTMI(channel: string): Promise<string | null> {
-  // Check cache first
-  if (channelIdCache.has(channel)) {
-    return channelIdCache.get(channel)!
+    if (!response.ok) throw new Error(`Twitch app token request failed: HTTP ${response.status}`)
+    const data = (await response.json()) as { access_token: string; expires_in: number }
+    appToken = { value: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }
+    return { clientId, token: appToken.value }
   }
 
-  return new Promise((resolve) => {
-    const client = new tmi.Client({
-      channels: [channel]
-    })
-
-    let resolved = false
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true
-        client.disconnect()
-        console.error(`[twitch-api] Timeout getting broadcaster ID for: ${channel}`)
-        resolve(null)
-      }
-    }, 10000)
-
-    client.on('roomstate', (channelName: string, state: TwitchRoomState) => {
-      if (resolved) return
-      
-      const userId = state['room-id']
-      if (userId) {
-        // Cache the result
-        channelIdCache.set(channel, userId)
-        console.log(`[twitch-api] Got broadcaster ID for ${channel}: ${userId}`)
-        clearTimeout(timeout)
-        resolved = true
-        client.disconnect()
-        resolve(userId)
-      }
-    })
-
-    client.on('disconnected', () => {
-      if (!resolved) {
-        clearTimeout(timeout)
-        resolved = true
-        resolve(null)
-      }
-    })
-
-    client.connect().catch(() => {
-      if (!resolved) {
-        clearTimeout(timeout)
-        resolved = true
-        resolve(null)
-      }
-    })
-  })
-}
-
-/**
- * Fetch channel badges using the modern Twitch Helix API with OAuth
- */
-async function fetchChannelBadgesHelix(broadcasterId: string): Promise<TwitchBadgeResponse | null> {
-  try {
-    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko'
-    const oauthToken = process.env.TWITCH_OAUTH
-    
-    if (!oauthToken) {
-      console.error('[twitch-api] TWITCH_OAUTH environment variable is required for badge fetching')
-      return null
-    }
-    
-    const url = `https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`
-    
-    console.log(`[twitch-api] Fetching channel badges from Helix API: ${url}`)
-    
-    const response = await fetch(url, {
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
-        'Accept': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      console.log(`[twitch-api] Helix API returned ${response.status}: ${response.statusText}`)
-      return null
-    }
-
-    const data = await response.json() as TwitchHelixResponse<TwitchBadge>
-    
-    if (!data.data || !Array.isArray(data.data)) {
-      console.log('[twitch-api] Invalid response format from Helix API')
-      return null
-    }
-
-    // Convert Helix format to our expected format
-    const badgeResponse: TwitchBadgeResponse = {
-      badge_sets: {}
-    }
-
-    for (const badge of data.data) {
-      if (!badge.set_id || !badge.versions) continue
-      
-      const versions: Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }> = {}
-      
-      for (const version of badge.versions) {
-        if (!version.id) continue
-        versions[version.id] = {
-          image_url_1x: version.image_url_1x || version.image_url_2x || version.image_url_4x,
-          image_url_2x: version.image_url_2x || version.image_url_1x || version.image_url_4x,
-          image_url_4x: version.image_url_4x || version.image_url_2x || version.image_url_1x
-        }
-      }
-      
-      badgeResponse.badge_sets[badge.set_id] = { versions }
-    }
-
-    console.log(`[twitch-api] Successfully parsed ${Object.keys(badgeResponse.badge_sets).length} badge sets from Helix`)
-    return badgeResponse
-
-  } catch (error) {
-    console.error('[twitch-api] Error fetching from Helix API:', (error as Error).message)
-    return null
-  }
-}
-
-/**
- * Fetch global badges using Helix API with OAuth
- */
-async function fetchGlobalBadgesHelix(): Promise<TwitchBadgeResponse | null> {
-  try {
-    const clientId = process.env.TWITCH_CLIENT_ID || 'kimne78kx3ncx6brgo4mv6wki5h1ko'
-    const oauthToken = process.env.TWITCH_OAUTH
-    
-    if (!oauthToken) {
-      console.error('[twitch-api] TWITCH_OAUTH environment variable is required for badge fetching')
-      return null
-    }
-    
-    const url = 'https://api.twitch.tv/helix/chat/badges/global'
-    
-    console.log(`[twitch-api] Fetching global badges from Helix API`)
-    
-    const response = await fetch(url, {
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${oauthToken.replace('oauth:', '')}`,
-        'Accept': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      console.log(`[twitch-api] Global badges Helix API returned ${response.status}`)
-      return null
-    }
-
-    const data = await response.json() as TwitchHelixResponse<TwitchBadge>
-    
-    if (!data.data || !Array.isArray(data.data)) {
-      return null
-    }
-
-    // Convert to our format
-    const badgeResponse: TwitchBadgeResponse = {
-      badge_sets: {}
-    }
-
-    for (const badge of data.data) {
-      if (!badge.set_id || !badge.versions) continue
-      
-      const versions: Record<string, { image_url_1x: string; image_url_2x: string; image_url_4x: string }> = {}
-      
-      for (const version of badge.versions) {
-        if (!version.id) continue
-        versions[version.id] = {
-          image_url_1x: version.image_url_1x || version.image_url_2x || version.image_url_4x,
-          image_url_2x: version.image_url_2x || version.image_url_1x || version.image_url_4x,
-          image_url_4x: version.image_url_4x || version.image_url_2x || version.image_url_1x
-        }
-      }
-      
-      badgeResponse.badge_sets[badge.set_id] = { versions }
-    }
-
-    return badgeResponse
-
-  } catch (error) {
-    console.error('[twitch-api] Error fetching global badges:', (error as Error).message)
-    return null
-  }
-}
-
-/**
- * Main function to get Twitch badges for a channel
- */
-export async function getTwitchBadgesPublic(channel: string): Promise<TwitchBadgeResponse | null> {
-  console.log(`[twitch-api] Getting badges for channel: ${channel}`)
-
-  try {
-    // Step 1: Get broadcaster ID using Helix API first, fallback to TMI
-    let broadcasterId = await getBroadcasterIdFromHelix(channel)
-    
-    if (!broadcasterId) {
-      console.log(`[twitch-api] Helix API failed, trying TMI fallback for ${channel}`)
-      broadcasterId = await getBroadcasterIdFromTMI(channel)
-    }
-    
-    if (!broadcasterId) {
-      console.error(`[twitch-api] Could not get broadcaster ID for ${channel}, using fallback`)
-      return null
-    }
-
-    // Step 2: Try to fetch channel-specific badges
-    const channelBadges = await fetchChannelBadgesHelix(broadcasterId)
-    
-    // Step 3: If channel badges failed or don't contain subscriber badges, try global + merge
-    if (!channelBadges || !channelBadges.badge_sets.subscriber) {
-      console.log(`[twitch-api] No channel subscriber badges found, fetching global badges`)
-      
-      const globalBadges = await fetchGlobalBadgesHelix()
-      
-      if (globalBadges) {
-        // Merge channel badges with global badges (channel takes priority)
-        const mergedBadges: TwitchBadgeResponse = {
-          badge_sets: { ...globalBadges.badge_sets }
-        }
-        
-        if (channelBadges) {
-          // Merge channel badges on top of global badges
-          Object.assign(mergedBadges.badge_sets, channelBadges.badge_sets)
-        }
-        
-        return mergedBadges
-      }
-    }
-
-    // Step 4: If we got channel badges with subscriber data, return them
-    if (channelBadges && channelBadges.badge_sets.subscriber) {
-      console.log(`[twitch-api] Using channel-specific subscriber badges for ${channel}`)
-      return channelBadges
-    }
-
-  } catch (error) {
-    console.error(`[twitch-api] Error in getTwitchBadgesPublic for ${channel}:`, (error as Error).message)
-    return null
-  }
-  
-  // Default return if no other conditions are met
+  const oauth = process.env.TWITCH_OAUTH
+  if (oauth) return { clientId, token: oauth.replace(/^oauth:/, '') }
   return null
 }
 
+async function helix<T>(path: string, credentials: Credentials): Promise<T[]> {
+  const response = await fetch(`https://api.twitch.tv/helix/${path}`, {
+    headers: { 'Client-ID': credentials.clientId, Authorization: `Bearer ${credentials.token}` },
+  })
+  // Revoked / rotated token: forget it so the next call requests a new one
+  if (response.status === 401) appToken = null
+  if (!response.ok) throw new Error(`Twitch API ${path} failed: HTTP ${response.status}`)
+  const json = (await response.json()) as { data?: T[] }
+  return json.data ?? []
+}
 
-// Helper function to extract subscription badge URLs from the response
-export function extractSubscriptionBadges(badgeData: TwitchBadgeResponse): Record<string, string> {
-  const subscriptionBadges: Record<string, string> = {}
-  
-  if (badgeData.badge_sets.subscriber) {
-    const versions = badgeData.badge_sets.subscriber.versions
-    Object.keys(versions).forEach(version => {
-      // Version is typically the number of months (0, 1, 3, 6, 9, 12, etc.)
-      subscriptionBadges[version] = versions[version].image_url_1x
-    })
+function toBadgeSets(badges: HelixBadge[]): TwitchBadgeResponse['badge_sets'] {
+  const sets: TwitchBadgeResponse['badge_sets'] = {}
+  for (const badge of badges) {
+    const versions: TwitchBadgeResponse['badge_sets'][string]['versions'] = {}
+    for (const v of badge.versions ?? []) {
+      versions[v.id] = {
+        image_url_1x: v.image_url_1x,
+        image_url_2x: v.image_url_2x || v.image_url_1x,
+        image_url_4x: v.image_url_4x || v.image_url_2x || v.image_url_1x,
+      }
+    }
+    sets[badge.set_id] = { versions }
   }
-  
-  return subscriptionBadges
+  return sets
+}
+
+/**
+ * Global + channel-specific (subscriber, bits...) badges. Returns null when no
+ * Twitch API credentials are configured: the client then falls back to the
+ * bundled global badges.
+ */
+export async function getTwitchBadges(channel: string): Promise<TwitchBadgeResponse | null> {
+  const credentials = await getCredentials()
+  if (!credentials) {
+    console.log('[twitch-api] No Twitch API credentials: using bundled global badges only')
+    return null
+  }
+
+  const globalBadges = await helix<HelixBadge>('chat/badges/global', credentials)
+
+  // Channel badges are a bonus: if they fail, keep the global ones
+  let channelBadges: HelixBadge[] = []
+  try {
+    const [user] = await helix<{ id: string }>(
+      `users?login=${encodeURIComponent(channel.toLowerCase())}`,
+      credentials,
+    )
+    if (user) channelBadges = await helix<HelixBadge>(`chat/badges?broadcaster_id=${user.id}`, credentials)
+  } catch (error) {
+    console.warn('[twitch-api] Channel badges unavailable:', (error as Error).message)
+  }
+
+  // Channel badges take priority over global ones
+  return { badge_sets: { ...toBadgeSets(globalBadges), ...toBadgeSets(channelBadges) } }
 }

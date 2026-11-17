@@ -1,170 +1,254 @@
-import type { AdapterConfig, TikTokConfig } from '../../../shared/types.js'
-import { TikTokLiveConnection as TikTokLiveConnectionImpl } from 'tiktok-live-connector'
+import {
+  ControlEvent,
+  SignatureRateLimitError,
+  TikTokLiveConnection,
+  UserOfflineError,
+  WebcastEvent,
+} from 'tiktok-live-connector'
+import type { TikTokConfig } from '../../../shared/types.js'
+import {
+  type Connector,
+  type ConnectorOptions,
+  backoff,
+  createDedupe,
+  createPoller,
+  createStatusHolder,
+  errorMessage,
+} from './connector.js'
 
-type BaseTikTokLiveConnection = InstanceType<typeof TikTokLiveConnectionImpl>
-
-// Extend the TikTokLiveConnection type to include our custom event types
-interface TikTokLiveConnection extends BaseTikTokLiveConnection {
-  on(event: 'chat', listener: (data: TikTokChatEvent) => void): this
-  on(event: 'gift', listener: (data: TikTokGiftEvent) => void): this
-  on(event: 'connected', listener: (state: TikTokConnectionState) => void): this
-  on(event: 'disconnected', listener: () => void): this
-  on(event: 'error', listener: (err: Error) => void): this
-  connect(): Promise<void>
-  disconnect(): void
+interface TikTokConnectorOptions extends ConnectorOptions, TikTokConfig {
+  /** How often we check whether the user is live (ms). TikTok/Euler need >= 30s. */
+  pollIntervalMs?: number
+  /** Optional Euler Stream API key (https://www.eulerstream.com) for higher rate limits. */
+  signApiKey?: string
 }
 
-// Define interfaces for the TikTok Live events
-interface TikTokChatEvent {
+// Minimal shapes of the events we use (tiktok-live-connector v2 / proto v3)
+interface TikTokUser {
   nickname?: string
+  displayId?: string
   uniqueId?: string
+}
+interface TikTokChatEvent {
+  common?: { msgId?: string; createTime?: string }
+  user?: TikTokUser
+  content?: string
   comment?: string
-  user?: {
-    nickname?: string
-    uniqueId?: string
-  }
 }
-
 interface TikTokGiftEvent {
-  giftType?: number
-  repeatEnd?: boolean
-  giftName?: string
+  common?: { msgId?: string }
+  user?: TikTokUser
   repeatCount?: number
-  uniqueId?: string
-  user?: {
-    nickname?: string
-    uniqueId?: string
-  }
-  giftInfo?: {
-    name?: string
-  }
+  repeatEnd?: number | boolean
+  gift?: { name?: string; type?: number; diamondCount?: number }
+  giftDetails?: { giftName?: string; giftType?: number }
 }
 
-interface TikTokConnectionState {
-  roomInfo?: {
-    viewerCount?: number
-  }
-}
+const MAX_BACKOFF_MS = 5 * 60_000
+const RATE_LIMIT_BACKOFF_MS = 2 * 60_000
+const MAX_MESSAGE_AGE_MS = 2 * 60_000
+/** If the live probe keeps failing, try a real connect every N checks as a fallback. */
+const CONNECT_FALLBACK_EVERY = 3
 
-interface TikTokAdapterConfig extends AdapterConfig, TikTokConfig {}
+const userName = (user?: TikTokUser) =>
+  user?.nickname || user?.displayId || user?.uniqueId || 'unknown'
 
-export interface TikTokAdapterReturn {
-  start: () => Promise<boolean>
-  isRunning: () => boolean
-  getStatus: () => 'stopped' | 'connecting' | 'connected' | 'error'
-}
+export function createTikTokConnector({
+  username,
+  pollIntervalMs = 30_000,
+  signApiKey,
+  onMessage,
+  onStatusChange,
+}: TikTokConnectorOptions): Connector {
+  const uniqueId = username.replace(/^@/, '')
+  const status = createStatusHolder('tiktok', uniqueId, onStatusChange)
+  const isDuplicate = createDedupe()
+  const options = signApiKey ? { signApiKey } : {}
 
-export async function createTikTokAdapter({ 
-  username, 
-  onMessage, 
-  onStatusChange
-}: TikTokAdapterConfig & { onStatusChange?: (status: string, message?: string) => void }): Promise<TikTokAdapterReturn> {
+  // Lightweight instance only used for live checks (HTML first, no signature needed)
+  const probe = new TikTokLiveConnection(uniqueId, options)
+
   let conn: TikTokLiveConnection | null = null
-  let status: 'stopped' | 'connecting' | 'connected' | 'error' = 'stopped'
+  let failures = 0
+  let unknownChecks = 0
+  let forceConnect = false
 
-  const updateStatus = (newStatus: typeof status, message?: string) => {
-    if (status !== newStatus) {
-      status = newStatus
-      onStatusChange?.(status, message)
-      console.log(`[tiktok] Status changed to: ${status}${message ? ` - ${message}` : ''}`)
-    }
-  }
-
-  const cleanup = () => {
-    if (conn) {
+  const disconnect = async () => {
+    const current = conn
+    conn = null
+    if (current) {
+      current.removeAllListeners()
       try {
-        conn.disconnect()
+        await current.disconnect()
       } catch (error) {
-        console.error('[tiktok] Error during cleanup:', (error as Error).message)
+        console.warn('[tiktok] error while disconnecting:', errorMessage(error))
       }
+    }
+  }
+
+  const handleChat = (data: TikTokChatEvent) => {
+    // On connect TikTok replays recent messages, sometimes several minutes old: skip those
+    const createdAt = Number(data.common?.createTime)
+    if (createdAt && Date.now() - createdAt > MAX_MESSAGE_AGE_MS) return
+    if (isDuplicate(data.common?.msgId)) return
+    const text = data.content ?? data.comment ?? ''
+    if (!text) return
+    onMessage({
+      id: data.common?.msgId ? `tt-${data.common.msgId}` : undefined,
+      username: userName(data.user),
+      message: text,
+      badges: [],
+      raw: { uniqueId: data.user?.displayId || data.user?.uniqueId },
+    })
+  }
+
+  const handleGift = (data: TikTokGiftEvent) => {
+    const giftType = data.gift?.type ?? data.giftDetails?.giftType
+    // Streakable gifts (type 1) fire on every combo step: only keep the final one
+    if (giftType === 1 && !data.repeatEnd) return
+    if (isDuplicate(data.common?.msgId)) return
+
+    const giftName = data.gift?.name || data.giftDetails?.giftName || 'a gift'
+    const count = data.repeatCount || 1
+    onMessage({
+      id: data.common?.msgId ? `tt-${data.common.msgId}` : undefined,
+      username: userName(data.user),
+      message: `sent ${giftName} x${count}`,
+      badges: [],
+      highlight: `🎁 ${giftName} x${count}`,
+      raw: { uniqueId: data.user?.displayId || data.user?.uniqueId, diamonds: data.gift?.diamondCount },
+    })
+  }
+
+  /** Connects to the live. Throws UserOfflineError when the user is not live. */
+  const connect = async (): Promise<void> => {
+    await disconnect()
+    status.set('connecting', `Connecting to @${uniqueId}'s live...`)
+
+    const connection = new TikTokLiveConnection(uniqueId, options)
+    conn = connection
+
+    connection.on(WebcastEvent.CHAT, (data) => {
+      try {
+        handleChat(data as unknown as TikTokChatEvent)
+      } catch (error) {
+        console.error('[tiktok] chat processing error:', errorMessage(error))
+      }
+    })
+
+    connection.on(WebcastEvent.GIFT, (data) => {
+      try {
+        handleGift(data as unknown as TikTokGiftEvent)
+      } catch (error) {
+        console.error('[tiktok] gift processing error:', errorMessage(error))
+      }
+    })
+
+    connection.on(WebcastEvent.STREAM_END, () => {
+      if (conn !== connection) return
+      void disconnect()
+      status.set('waiting', 'Stream ended - waiting for the next live')
+      poller.schedule(pollIntervalMs)
+    })
+
+    connection.on(ControlEvent.DISCONNECTED, ({ code, reason }) => {
+      if (conn !== connection) return
       conn = null
-      updateStatus('stopped')
-    }
-  }
+      connection.removeAllListeners()
+      // Connection dropped (network, TikTok...): check again quickly
+      status.set('waiting', `Disconnected (${code}${reason ? ` ${reason}` : ''}), checking again...`)
+      poller.schedule(5_000)
+    })
 
-  const start = async (): Promise<boolean> => {
-    if (status === 'connecting' || status === 'connected') {
-      console.log('[tiktok] Already connecting or connected')
-      return status === 'connected'
-    }
+    connection.on(ControlEvent.ERROR, (error) => {
+      console.warn('[tiktok] connection error:', errorMessage(error?.exception ?? error))
+    })
 
-    cleanup()
-    updateStatus('connecting', `Connecting to TikTok user: ${username}`)
-    
     try {
-      conn = new TikTokLiveConnectionImpl(username) as TikTokLiveConnection
-
-      // Set up event handlers
-      conn.on('chat', (data: TikTokChatEvent) => {
-        try {
-          onMessage({
-            username: data.user?.nickname || data.user?.uniqueId || data.nickname || data.uniqueId || 'unknown',
-            message: data.comment || '',
-            badges: [],
-            raw: data
-          })
-        } catch (error) {
-          console.error('[tiktok] chat processing error:', (error as Error).message)
-        }
-      })
-
-      // Using type assertion to handle the event type
-      conn.on('gift', (data: TikTokGiftEvent) => {
-        try {
-          // Only process gifts that are not part of a streak or are the final gift in a streak
-          if (data.giftType === 1 && !data.repeatEnd) return
-          
-          const giftName = data.giftInfo?.name || data.giftName || 'a gift'
-          const count = data.repeatCount || 1
-          const username = data.user?.nickname || data.user?.uniqueId || data.uniqueId || 'Someone'
-          const text = `${username} sent ${giftName} x${count}`
-          
-          onMessage({ 
-            username,
-            message: text, 
-            badges: ['gift'], 
-            raw: data 
-          })
-        } catch (error) {
-          console.error('[tiktok] gift processing error:', (error as Error).message)
-        }
-      })
-
-      // Using type assertion to handle the event type
-      conn.on('connected', (state: TikTokConnectionState) => {
-        updateStatus('connected', `Connected to TikTok user: ${username}, viewers: ${state?.roomInfo?.viewerCount || 0}`)
-        console.log('[tiktok] connected, viewerCount:', state?.roomInfo?.viewerCount)
-      })
-
-      // Using type assertion to handle the event type
-      conn.on('disconnected', () => {
-        updateStatus('stopped', 'Disconnected from TikTok')
-        console.log('[tiktok] disconnected')
-      })
-
-      conn.on('error', (error: Error) => {
-        const errorMessage = error?.message || 'Unknown error'
-        updateStatus('error', errorMessage)
-        console.error('[tiktok] connection error:', errorMessage)
-      })
-
-      await conn.connect()
-      return true
+      const state = await connection.connect()
+      if (conn === connection) {
+        status.set('connected', `Connected to @${uniqueId}'s live`, String(state.roomId ?? ''))
+      }
     } catch (error) {
-      const errorMessage = (error as Error).message || 'Failed to connect to TikTok'
-      updateStatus('error', errorMessage)
-      console.error('[tiktok] connection error:', errorMessage)
-      cleanup()
-      return false
+      if (conn === connection) {
+        conn = null
+        connection.removeAllListeners()
+      }
+      throw error
     }
   }
 
-  const isRunning = (): boolean => status === 'connected'
-  const getStatus = (): typeof status => status
+  const check = async (): Promise<number | null> => {
+    if (conn && !forceConnect) return null // connected: events drive the next step
+
+    let live: boolean | null = null
+    if (!forceConnect) {
+      try {
+        live = await probe.fetchIsLive()
+      } catch (error) {
+        console.warn('[tiktok] live check failed:', errorMessage(error))
+      }
+    }
+
+    const tryConnect =
+      forceConnect || live === true || (live === null && (unknownChecks + 1) % CONNECT_FALLBACK_EVERY === 0)
+    forceConnect = false
+
+    try {
+      if (tryConnect) {
+        await connect()
+        failures = 0
+        unknownChecks = 0
+        return conn ? null : pollIntervalMs
+      }
+      if (live === false) {
+        failures = 0
+        unknownChecks = 0
+        status.set('waiting', `Waiting for @${uniqueId} to go live`)
+      } else {
+        unknownChecks++
+        status.set('waiting', `Could not check @${uniqueId}'s live status, retrying...`)
+      }
+      return pollIntervalMs
+    } catch (error) {
+      if (error instanceof UserOfflineError) {
+        failures = 0
+        status.set('waiting', `Waiting for @${uniqueId} to go live`)
+        return pollIntervalMs
+      }
+      failures++
+      if (error instanceof SignatureRateLimitError) {
+        status.set(
+          'error',
+          'TikTok signing rate limit reached, retrying in 2 min (set TIKTOK_SIGN_API_KEY to raise it)',
+        )
+        return RATE_LIMIT_BACKOFF_MS
+      }
+      status.set('error', `Connection failed (${errorMessage(error)}), retrying automatically`)
+      return backoff(pollIntervalMs, failures, MAX_BACKOFF_MS)
+    }
+  }
+
+  const poller = createPoller(check)
 
   return {
-    start,
-    isRunning,
-    getStatus
+    start() {
+      status.set('waiting', `Checking whether @${uniqueId} is live...`)
+      poller.start()
+    },
+    async stop() {
+      poller.stop()
+      await disconnect()
+    },
+    async refresh() {
+      // Manual action: skip the live probe and try to connect directly.
+      // If a check is already running, the poller runs another one right after.
+      await disconnect()
+      failures = 0
+      forceConnect = true
+      status.set('waiting', 'Manual refresh: connecting...')
+      await poller.trigger()
+    },
+    getStatus: status.get,
   }
 }

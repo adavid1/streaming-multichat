@@ -1,208 +1,155 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type { ChatMessage, WebSocketMessage, TwitchBadgeResponse } from '../../../shared/types'
+import { useEffect, useRef, useState } from 'react'
+import type {
+  ChatMessage,
+  PlatformStatuses,
+  TwitchBadgeResponse,
+  WebSocketMessage,
+} from '../../../shared/types'
 
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+interface UseWebSocketOptions {
+  onChat: (message: ChatMessage) => void
+  onHistory?: (messages: ChatMessage[], serverTime: number) => void
+}
 
 interface UseWebSocketReturn {
   connectionStatus: ConnectionStatus
   isConnected: boolean
-  lastMessage: ChatMessage | null
+  statuses: PlatformStatuses | null
   twitchBadges: TwitchBadgeResponse | null
-  sendMessage: (message: unknown) => void
-  lastWebSocketMessage: WebSocketMessage | null
 }
 
-export const useWebSocket = (
-  url?: string,
-  onMessage?: (message: ChatMessage) => void
-): UseWebSocketReturn => {
+/** The server pings every 25s: without any message for this long, the socket is considered dead. */
+const STALE_CONNECTION_MS = 60_000
+const MAX_RECONNECT_DELAY_MS = 10_000
+
+const defaultUrl = () =>
+  import.meta.env.DEV
+    ? 'ws://localhost:8787'
+    : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+
+/**
+ * Single WebSocket connection to the server. It reconnects forever (an OBS
+ * browser source must recover by itself after a server restart or a network
+ * hiccup, without anyone touching it).
+ */
+export const useWebSocket = ({ onChat, onHistory }: UseWebSocketOptions): UseWebSocketReturn => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
-  const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null)
-  const [lastWebSocketMessage, setLastWebSocketMessage] = useState<WebSocketMessage | null>(null)
+  const [statuses, setStatuses] = useState<PlatformStatuses | null>(null)
   const [twitchBadges, setTwitchBadges] = useState<TwitchBadgeResponse | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<number | null>(null)
-  const reconnectAttemptsRef = useRef(0)
-  const isUnmountedRef = useRef(false)
-  const maxReconnectAttempts = 5
 
-  const wsUrl =
-    url ||
-    (import.meta.env.DEV
-      ? 'ws://localhost:8787' // dev: connect to server
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`)
+  // Keep the latest callbacks without reconnecting when they change
+  const handlersRef = useRef({ onChat, onHistory })
+  handlersRef.current = { onChat, onHistory }
 
-  const connect = useCallback(() => {
-    if (isUnmountedRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
-      return
+  useEffect(() => {
+    let ws: WebSocket | null = null
+    let disposed = false
+    let attempts = 0
+    let reconnectTimer: number | undefined
+    let staleTimer: number | undefined
+
+    const scheduleReconnect = () => {
+      if (disposed) return
+      window.clearTimeout(reconnectTimer)
+      const delay = Math.min(1000 * 2 ** attempts, MAX_RECONNECT_DELAY_MS)
+      attempts++
+      reconnectTimer = window.setTimeout(connect, delay)
     }
 
-    // Clean up any existing connection first
-    if (wsRef.current) {
-      const currentWs = wsRef.current
-      if (
-        currentWs.readyState === WebSocket.OPEN ||
-        currentWs.readyState === WebSocket.CONNECTING
-      ) {
-        // Remove event listeners to prevent errors during cleanup
-        currentWs.onopen = null
-        currentWs.onmessage = null
-        currentWs.onclose = null
-        currentWs.onerror = null
-        currentWs.close()
-      }
-      wsRef.current = null
+    const resetStaleTimer = (socket: WebSocket) => {
+      window.clearTimeout(staleTimer)
+      staleTimer = window.setTimeout(() => {
+        console.warn('[ws] no data from server for a while, reconnecting')
+        // On a dead TCP connection, close() may wait minutes for the closing
+        // handshake before firing onclose: detach the socket and reconnect now.
+        if (ws !== socket) return
+        ws = null
+        socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null
+        socket.close()
+        setConnectionStatus('disconnected')
+        scheduleReconnect()
+      }, STALE_CONNECTION_MS)
     }
 
-    setConnectionStatus('connecting')
+    const handleMessage = (msg: WebSocketMessage) => {
+      switch (msg.type) {
+        case 'chat':
+          handlersRef.current.onChat(msg.data)
+          break
+        case 'history':
+          handlersRef.current.onHistory?.(msg.data, msg.serverTime)
+          break
+        case 'status':
+          setStatuses(msg.data)
+          break
+        case 'badges':
+          setTwitchBadges(msg.data)
+          break
+        default:
+          break
+      }
+    }
 
-    try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
+    function connect() {
+      if (disposed) return
+      setConnectionStatus('connecting')
 
-      ws.onopen = () => {
-        // Only update state if this is still the current WebSocket
-        if (wsRef.current === ws) {
-          setConnectionStatus('connected')
-          reconnectAttemptsRef.current = 0
-        }
+      const socket = new WebSocket(defaultUrl())
+      ws = socket
+
+      socket.onopen = () => {
+        attempts = 0
+        setConnectionStatus('connected')
+        resetStaleTimer(socket)
       }
 
-      ws.onmessage = (event) => {
-        // Only process messages if this is still the current WebSocket
-        if (wsRef.current !== ws) return
-
+      socket.onmessage = (event) => {
+        resetStaleTimer(socket)
         try {
-          const data: WebSocketMessage | ChatMessage = JSON.parse(event.data)
-
-          // Handle different message types
-          if ('type' in data) {
-            // WebSocketMessage
-            const wsMessage = data as WebSocketMessage
-            setLastWebSocketMessage(wsMessage)
-
-            if (wsMessage.type === 'chat' && wsMessage.data) {
-              const chatMessage = wsMessage.data as ChatMessage
-              setLastMessage(chatMessage)
-              onMessage?.(chatMessage)
-            } else if (wsMessage.type === 'connection') {
-              // Handle connection messages if needed
-            } else if (wsMessage.type === 'badges' && wsMessage.data) {
-              setTwitchBadges(wsMessage.data as TwitchBadgeResponse)
-            }
-            // Note: youtube-status is handled via lastWebSocketMessage
-          } else {
-            // Direct ChatMessage (legacy support)
-            const chatMessage = data as ChatMessage
-            setLastMessage(chatMessage)
-            onMessage?.(chatMessage)
-          }
+          handleMessage(JSON.parse(event.data) as WebSocketMessage)
         } catch (error) {
-          console.error('[WebSocket] Failed to parse message:', error)
+          console.error('[ws] failed to handle message:', error)
         }
       }
 
-      ws.onclose = (event) => {
-        // Only handle close if this is still the current WebSocket
-        if (wsRef.current === ws) {
-          setConnectionStatus('disconnected')
-          wsRef.current = null
-
-          // Auto-reconnect with exponential backoff (only if not a clean close and not unmounted)
-          if (
-            !event.wasClean &&
-            !isUnmountedRef.current &&
-            reconnectAttemptsRef.current < maxReconnectAttempts
-          ) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000)
-
-            reconnectTimeoutRef.current = setTimeout(() => {
-              if (!isUnmountedRef.current) {
-                reconnectAttemptsRef.current++
-                connect()
-              }
-            }, delay)
-          }
-        }
+      socket.onerror = () => {
+        // onclose always follows: reconnection is handled there
+        if (!disposed) setConnectionStatus('error')
       }
 
-      ws.onerror = (error) => {
-        // Only handle error if this is still the current WebSocket
-        if (wsRef.current === ws) {
-          // Only log errors for connections that were expected to work
-          // Skip logging if the connection was closed immediately (React Strict Mode)
-          if (ws.readyState !== WebSocket.CLOSED && !isUnmountedRef.current) {
-            console.error('[WebSocket] Error:', error)
-          }
-          setConnectionStatus('error')
-          wsRef.current = null
-        }
+      socket.onclose = () => {
+        window.clearTimeout(staleTimer)
+        if (ws !== socket || disposed) return
+        ws = null
+        setConnectionStatus('disconnected')
+        scheduleReconnect()
       }
-    } catch (error) {
-      console.error('[WebSocket] Failed to create connection:', error)
-      setConnectionStatus('error')
-    }
-  }, [wsUrl, onMessage])
-
-  const disconnect = useCallback(() => {
-    isUnmountedRef.current = true
-
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
     }
 
-    if (wsRef.current) {
-      const currentWs = wsRef.current
-      // Remove event listeners to prevent errors during cleanup
-      currentWs.onopen = null
-      currentWs.onmessage = null
-      currentWs.onclose = null
-      currentWs.onerror = null
-
-      // Only close if the WebSocket is in a valid state
-      if (
-        currentWs.readyState === WebSocket.OPEN ||
-        currentWs.readyState === WebSocket.CONNECTING
-      ) {
-        currentWs.close()
-      }
-      wsRef.current = null
+    // Reconnect right away when the page becomes visible / the network comes back
+    const wakeUp = () => {
+      if (disposed || ws) return
+      attempts = 0
+      window.clearTimeout(reconnectTimer)
+      connect()
     }
+    window.addEventListener('online', wakeUp)
+    document.addEventListener('visibilitychange', wakeUp)
 
-    setConnectionStatus('disconnected')
-  }, [])
-
-  const sendMessage = useCallback((message: unknown) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message))
-    } else {
-      console.warn('[WebSocket] Cannot send message: connection not open')
-    }
-  }, [])
-
-  // Connect on mount, disconnect on unmount
-  useEffect(() => {
-    isUnmountedRef.current = false
-
-    // Small delay to prevent connection attempts during React Strict Mode cleanup
-    const connectTimer = setTimeout(() => {
-      if (!isUnmountedRef.current) {
-        connect()
-      }
-    }, 10)
+    connect()
 
     return () => {
-      clearTimeout(connectTimer)
-      disconnect()
-    }
-  }, [connect, disconnect])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
+      disposed = true
+      window.clearTimeout(reconnectTimer)
+      window.clearTimeout(staleTimer)
+      window.removeEventListener('online', wakeUp)
+      document.removeEventListener('visibilitychange', wakeUp)
+      if (ws) {
+        ws.onclose = null
+        ws.close()
+        ws = null
       }
     }
   }, [])
@@ -210,9 +157,7 @@ export const useWebSocket = (
   return {
     connectionStatus,
     isConnected: connectionStatus === 'connected',
-    lastMessage,
-    lastWebSocketMessage,
+    statuses,
     twitchBadges,
-    sendMessage,
   }
 }
