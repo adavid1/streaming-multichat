@@ -1,15 +1,15 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useWebSocket } from './useWebSocket'
 import type { ChatMessage } from '../../../shared/types'
 
 const MAX_MESSAGES = 200
-const EXPIRY_MS = 60_000 // 1 minute
+const EXPIRY_MS = 60_000 // messages disappear after 1 minute in the overlay
+const FADE_MS = 320
 
 interface UseChatMessagesReturn {
   messages: ChatMessage[]
   addMessage: (message: ChatMessage) => void
+  addHistory: (messages: ChatMessage[]) => void
   clearMessages: () => void
-  messageCount: number
   expiringIds: Set<string>
 }
 
@@ -17,98 +17,75 @@ interface UseChatMessagesOptions {
   autoExpire?: boolean
 }
 
-export const useChatMessages = (options?: UseChatMessagesOptions): UseChatMessagesReturn => {
-  const { autoExpire = true } = options || {}
+function merge(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const known = new Set(prev.map((m) => m.id))
+  const fresh = incoming.filter((m) => !known.has(m.id))
+  if (fresh.length === 0) return prev
+  const next = [...prev, ...fresh].sort((a, b) => a.ts - b.ts)
+  return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
+}
+
+export const useChatMessages = ({
+  autoExpire = true,
+}: UseChatMessagesOptions = {}): UseChatMessagesReturn => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [expiringIds, setExpiringIds] = useState<Set<string>>(new Set())
-  const removalTimeoutsRef = useRef<Record<string, number>>({})
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
 
   const addMessage = useCallback((message: ChatMessage) => {
-    setMessages((prev) => {
-      // Check for duplicate messages based on ID
-      const isDuplicate = prev.some((msg) => msg.id === message.id)
-      if (isDuplicate) {
-        return prev
-      }
-
-      const newMessages = [...prev, message]
-
-      // Keep only the most recent messages
-      if (newMessages.length > MAX_MESSAGES) {
-        return newMessages.slice(-MAX_MESSAGES)
-      }
-
-      return newMessages
-    })
+    // Use the local clock for expiry: the server clock may differ from the OBS machine
+    setMessages((prev) => merge(prev, [{ ...message, ts: Date.now() }]))
   }, [])
 
-  const clearMessages = useCallback(() => {
-    setMessages([])
-  }, [])
+  // History is sent by the server on (re)connection: dedupe by id and skip
+  // messages that would already have expired in the overlay
+  const addHistory = useCallback(
+    (history: ChatMessage[]) => {
+      const now = Date.now()
+      const kept = autoExpire ? history.filter((m) => now - m.ts < EXPIRY_MS - 5_000) : history
+      setMessages((prev) => merge(prev, kept))
+    },
+    [autoExpire]
+  )
 
-  // Set up WebSocket connection and message handling
-  useWebSocket(undefined, addMessage)
+  const clearMessages = useCallback(() => setMessages([]), [])
 
-  // Auto-expire messages older than EXPIRY_MS (only when autoExpire is enabled)
   useEffect(() => {
     if (!autoExpire) {
-      // If disabling autoExpire, cancel all pending removals and clear expiring state
-      const timeouts = removalTimeoutsRef.current
-      Object.values(timeouts).forEach((tid) => window.clearTimeout(tid))
-      removalTimeoutsRef.current = {}
       setExpiringIds(new Set())
       return
     }
 
-    const intervalId = setInterval(() => {
+    const timeouts = new Set<number>()
+    const expiring = new Set<string>()
+
+    const intervalId = window.setInterval(() => {
       const now = Date.now()
+      const fresh = messagesRef.current
+        .filter((m) => now - m.ts >= EXPIRY_MS && !expiring.has(m.id))
+        .map((m) => m.id)
+      if (fresh.length === 0) return
 
-      setMessages((prev) => {
-        // Identify messages that should start expiring
-        const toExpire = prev.filter((m) => now - m.ts >= EXPIRY_MS).map((m) => m.id)
+      // 1. fade out, 2. remove once the CSS transition is done
+      fresh.forEach((id) => expiring.add(id))
+      setExpiringIds(new Set(expiring))
 
-        if (toExpire.length > 0) {
-          setExpiringIds((prevSet) => {
-            const next = new Set(prevSet)
-            toExpire.forEach((id) => {
-              if (!next.has(id)) {
-                next.add(id)
-                // schedule actual removal after fade duration (~300ms)
-                const timeoutId = window.setTimeout(() => {
-                  setMessages((curr) => curr.filter((m) => m.id !== id))
-                  setExpiringIds((currSet) => {
-                    const after = new Set(currSet)
-                    after.delete(id)
-                    return after
-                  })
-                  // cleanup timeout handle
-                  delete removalTimeoutsRef.current[id]
-                }, 320)
-                removalTimeoutsRef.current[id] = timeoutId
-              }
-            })
-            return next
-          })
-        }
-
-        return prev
-      })
-    }, 250)
+      const timeoutId = window.setTimeout(() => {
+        timeouts.delete(timeoutId)
+        const removed = new Set(fresh)
+        fresh.forEach((id) => expiring.delete(id))
+        setMessages((curr) => curr.filter((m) => !removed.has(m.id)))
+        setExpiringIds(new Set(expiring))
+      }, FADE_MS)
+      timeouts.add(timeoutId)
+    }, 500)
 
     return () => {
-      clearInterval(intervalId)
-      // Clear any pending removals
-      const timeouts = removalTimeoutsRef.current
-      Object.values(timeouts).forEach((tid) => window.clearTimeout(tid))
-      removalTimeoutsRef.current = {}
+      window.clearInterval(intervalId)
+      timeouts.forEach((id) => window.clearTimeout(id))
     }
   }, [autoExpire])
 
-  return {
-    messages,
-    addMessage,
-    clearMessages,
-    messageCount: messages.length,
-    expiringIds,
-  }
+  return { messages, addMessage, addHistory, clearMessages, expiringIds }
 }

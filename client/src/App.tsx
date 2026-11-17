@@ -3,16 +3,33 @@ import { MessageSquare, Settings, X } from 'lucide-react'
 import { ChatMessage } from './components/ChatMessage'
 import { FilterControls } from './components/FilterControls'
 import { ConnectionStatus } from './components/ConnectionStatus'
-import { YouTubeConnectionStatus } from './components/YouTubeConnectionStatus'
-import { TikTokConnectionStatus } from './components/TikTokConnectionStatus'
-import { TwitchConnectionStatus } from './components/TwitchConnectionStatus'
+import { PlatformStatusBadge } from './components/PlatformStatusBadge'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useChatMessages } from './hooks/useChatMessages'
-import { useYouTubeControls } from './hooks/useYouTubeControls'
-import { useTikTokControls } from './hooks/useTikTokControls'
 import { BadgeProvider } from './contexts/BadgeContext'
 import { EmoteProvider } from './contexts/EmoteContext'
-import type { PlatformFilters, YouTubeStatus, TikTokStatus, TwitchStatus } from '../../shared/types'
+import type { Platform, PlatformFilters } from '../../shared/types'
+
+const PLATFORMS: Platform[] = ['twitch', 'youtube', 'tiktok']
+const API_BASE = import.meta.env.DEV ? 'http://localhost:8787' : ''
+
+/** Public overlay by default; `/private` (or `?private=1`) shows the streamer dock. */
+function detectPublicMode(): boolean {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('mode') === 'public') return true
+  const privateParam = params.get('private')?.toLowerCase()
+  const isPrivateParam = privateParam !== undefined && ['1', 'true', 'yes'].includes(privateParam)
+  const isPrivatePath = window.location.pathname.replace(/\/+$/, '') === '/private'
+  return !(isPrivateParam || isPrivatePath)
+}
+
+async function refreshPlatform(platform: Platform): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/${platform}/refresh`, { method: 'POST' })
+  if (!response.ok && response.status !== 429) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `HTTP ${response.status}`)
+  }
+}
 
 const App: React.FC = () => {
   const [filters, setFilters] = useState<PlatformFilters>({
@@ -22,93 +39,25 @@ const App: React.FC = () => {
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [youtubeStatus, setYoutubeStatus] = useState<YouTubeStatus | null>(null)
-  const [tiktokStatus, setTiktokStatus] = useState<TikTokStatus | null>(null)
-  const [twitchStatus, setTwitchStatus] = useState<TwitchStatus | null>(null)
-  const [isPublicMode] = useState(() => {
-    const params = new URLSearchParams(window.location.search)
-    const modeParam = params.get('mode')
-    const privateParam = params.get('private')
-    const isPrivateParam =
-      typeof privateParam === 'string' && ['1', 'true', 'yes'].includes(privateParam.toLowerCase())
-    const path = window.location.pathname.replace(/\/+$/, '')
-    const isPrivatePath = path === '/private'
-    const isPublicMode = modeParam === 'public'
-    return isPublicMode || !(isPrivateParam || isPrivatePath)
+  const [isPublicMode] = useState(detectPublicMode)
+
+  const { messages, addMessage, addHistory, clearMessages, expiringIds } = useChatMessages({
+    autoExpire: isPublicMode,
+  })
+  const { connectionStatus, isConnected, statuses, twitchBadges } = useWebSocket({
+    onChat: addMessage,
+    onHistory: addHistory,
   })
 
-  const { connectionStatus, isConnected, twitchBadges, lastWebSocketMessage } = useWebSocket()
-  const { messages, clearMessages, expiringIds } = useChatMessages({ autoExpire: isPublicMode })
-  const { startYouTube, isLoading: youtubeLoading } = useYouTubeControls()
-  const { startTikTok, isLoading: tiktokLoading } = useTikTokControls()
-
-  // Handle status updates from WebSocket
-  useEffect(() => {
-    if (lastWebSocketMessage?.type === 'youtube-status' && lastWebSocketMessage.data) {
-      const statusData = lastWebSocketMessage.data as YouTubeStatus
-      setYoutubeStatus(statusData)
-    }
-
-    if (lastWebSocketMessage?.type === 'twitch-status' && lastWebSocketMessage.data) {
-      const statusData = lastWebSocketMessage.data as TwitchStatus
-      setTwitchStatus(statusData)
-    }
-
-    if (lastWebSocketMessage?.type === 'tiktok-status' && lastWebSocketMessage.data) {
-      const statusData = lastWebSocketMessage.data as TikTokStatus
-      setTiktokStatus(statusData)
-    }
-  }, [lastWebSocketMessage])
-
-  // Fetch initial status when connected
-  useEffect(() => {
-    // This runs once when the page loads (including F5 refresh)
-    const fetchData = async () => {
-      if (!isConnected) return
-      try {
-        const baseUrl = import.meta.env.DEV ? 'http://localhost:8787' : ''
-
-        const response = await fetch(`${baseUrl}/api/status`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-          throw new Error(errorData.error || `HTTP ${response.status}`)
-        }
-
-        const statusData = await response.json()
-
-        setYoutubeStatus(statusData.youtube)
-        setTiktokStatus(statusData.tiktok)
-        setTwitchStatus(statusData.twitch)
-      } catch (error) {
-        console.error('Error fetching data:', error)
-      }
-    }
-
-    fetchData()
-  }, [isConnected])
-
-  // Filter messages based on filters and search query
   const filteredMessages = useMemo(() => {
+    const query = searchQuery.toLowerCase()
     return messages.filter((message) => {
-      // Platform filter
       if (!filters[message.platform]) return false
-
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        return (
-          message.username.toLowerCase().includes(query) ||
-          message.message.toLowerCase().includes(query)
-        )
-      }
-
-      return true
+      if (!query) return true
+      return (
+        message.username.toLowerCase().includes(query) ||
+        message.message.toLowerCase().includes(query)
+      )
     })
   }, [messages, filters, searchQuery])
 
@@ -116,37 +65,16 @@ const App: React.FC = () => {
     setFilters((prev) => ({ ...prev, [platform]: enabled }))
   }, [])
 
-  const handleSearchChange = useCallback((query: string) => {
-    setSearchQuery(query)
-  }, [])
+  const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), [])
 
-  const toggleSettings = useCallback(() => {
-    setShowSettings((prev) => !prev)
-  }, [])
-
-  const handleYouTubeStart = useCallback(async () => {
-    try {
-      await startYouTube()
-    } catch (error) {
-      console.error('Failed to start YouTube:', error)
-    }
-  }, [startYouTube])
-
-  const handleTikTokStart = useCallback(async () => {
-    try {
-      await startTikTok()
-    } catch (error) {
-      console.error('Failed to start TikTok:', error)
-    }
-  }, [startTikTok])
-
-  // Set up body classes for styling
   useEffect(() => {
     document.body.className = isPublicMode ? 'public' : 'private'
     return () => {
       document.body.className = ''
     }
   }, [isPublicMode])
+
+  const waitingPlatforms = PLATFORMS.filter((p) => statuses?.[p]?.status === 'waiting')
 
   return (
     <EmoteProvider>
@@ -156,29 +84,23 @@ const App: React.FC = () => {
         >
           {/* Header - hidden in public mode */}
           {!isPublicMode && (
-            <header className="flex items-center justify-between border-b border-gray-800 p-3">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 p-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5" />
                 <h1 className="text-lg font-semibold">Multichat</h1>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <ConnectionStatus status={connectionStatus} />
-                {isConnected && <TwitchConnectionStatus status={twitchStatus?.status || null} />}
-                {isConnected && (
-                  <YouTubeConnectionStatus
-                    status={youtubeStatus}
-                    onStart={handleYouTubeStart}
-                    disabled={youtubeLoading}
-                  />
-                )}
-                {isConnected && (
-                  <TikTokConnectionStatus
-                    status={tiktokStatus}
-                    onStart={handleTikTokStart}
-                    disabled={tiktokLoading}
-                  />
-                )}
+                {isConnected &&
+                  PLATFORMS.map((platform) => (
+                    <PlatformStatusBadge
+                      key={platform}
+                      platform={platform}
+                      status={statuses?.[platform]}
+                      onRefresh={refreshPlatform}
+                    />
+                  ))}
                 <button
                   onClick={toggleSettings}
                   className="rounded-lg bg-gray-800 p-2 transition-colors hover:bg-gray-700"
@@ -204,17 +126,15 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {/* Chat Filters */}
               <div className="mb-6">
                 <FilterControls
                   filters={filters}
                   searchQuery={searchQuery}
                   onFilterChange={handleFilterChange}
-                  onSearchChange={handleSearchChange}
+                  onSearchChange={setSearchQuery}
                 />
               </div>
 
-              {/* Stats and Clear */}
               <div className="border-t border-gray-800 pt-3">
                 <div className="flex items-center justify-between text-sm text-chat-muted">
                   <span>Total messages: {messages.length}</span>
@@ -242,15 +162,13 @@ const App: React.FC = () => {
                   <div className="text-center">
                     <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
                     <p>No messages yet...</p>
-                    {!isConnected && <p className="mt-1 text-sm">Connecting to chat...</p>}
-                    {youtubeStatus?.status === 'stopped' && (
-                      <p className="mt-1 text-sm">
-                        YouTube monitoring is stopped - click the YouTube icon to start
-                      </p>
+                    {!isConnected && (
+                      <p className="mt-1 text-sm">Connecting to the multichat server...</p>
                     )}
-                    {tiktokStatus?.status === 'stopped' && (
+                    {isConnected && waitingPlatforms.length > 0 && (
                       <p className="mt-1 text-sm">
-                        TikTok monitoring is stopped - click the TikTok icon to start
+                        Waiting for the live on {waitingPlatforms.join(', ')}: chats connect
+                        automatically when the stream starts.
                       </p>
                     )}
                   </div>

@@ -9,7 +9,7 @@ on:
     types: [ published ]
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '22'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -47,8 +47,8 @@ jobs:
       - name: Lint client
         run: cd client && npm run lint
 
-      - name: Type check shared
-        run: cd shared && npx tsc --noEmit
+      - name: Build shared types (needed by server/client type checks)
+        run: npm run build:shared
 
       - name: Type check server
         run: cd server && npx tsc --noEmit

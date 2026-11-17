@@ -3,7 +3,7 @@
 A powerful, real-time chat overlay application that unifies **Twitch**, **YouTube Live**, and **TikTok Live** chat into a single interface. Perfect for streamers who want to engage with their audience across multiple platforms simultaneously.
 
 ![Multichat Demo](https://img.shields.io/badge/Platforms-Twitch%20%7C%20YouTube%20%7C%20TikTok-blueviolet)
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
+![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -37,7 +37,7 @@ A powerful, real-time chat overlay application that unifies **Twitch**, **YouTub
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 22+ 
 - npm or yarn
 - Docker (optional, for containerized deployment)
 
@@ -49,25 +49,15 @@ npm run install:all
 ```
 
 ### 2. Environment Configuration
-Create `server/.env` from the example:
+Create `server/.env` from the example and fill it in (every variable is documented in the file):
 ```bash
 cp server/.env.example server/.env
 ```
 
-Configure your platforms in `server/.env`:
+Minimal configuration:
 ```env
-# General
-PORT=8787
-
-# Twitch (Required for Twitch chat)
 TWITCH_CHANNEL=yourchannel
-TWITCH_OAUTH=oauth:your_oauth_token
-TWITCH_CLIENT_ID=your_twitch_client_id
-
-# YouTube (Required for YouTube chat)
 YT_CHANNEL_ID=UCxxxxxxxxxxxxxxxxxxxx
-
-# TikTok (Required for TikTok chat)
 TIKTOK_USERNAME=your_tiktok_username
 ```
 
@@ -77,24 +67,43 @@ npm run dev
 ```
 - Server/WebSocket: http://localhost:8787
 - OBS overlay: http://localhost:5173/
-- OBS Streamer view: http://localhost:5173/private
+- OBS dock (streamer view): http://localhost:5173/private
 
 ### 4. Production Build
 ```bash
 npm run build
-npm run server
+NODE_ENV=production node server/dist/index.js
 ```
+
+## ⚡ Zero-touch live detection
+
+You don't need to start anything when you go live. Each platform has a
+connector that runs on its own:
+
+```
+waiting ──(channel goes live)──▶ connecting ──▶ connected
+   ▲                                               │
+   └──────────(stream ends / connection lost)──────┘
+```
+
+- **Twitch**: the IRC chat is always readable, live or not.
+- **YouTube**: the server checks `youtube.com/channel/<id>/live` every 20 s
+  (`YT_POLL_INTERVAL_SECONDS`) and connects as soon as a live is running. While
+  connected it keeps checking every 2 min to follow a new broadcast.
+- **TikTok**: the server checks every 30 s (`TIKTOK_POLL_INTERVAL_SECONDS`)
+  whether you are live, then connects.
+- Errors never block a connector: it keeps retrying with backoff.
+- The overlay and dock reconnect to the server forever (server restart, network
+  cut...), and receive the last 100 messages on reconnection.
+
+In the dock, clicking a platform badge forces an immediate check / reconnection.
 
 ## 🐳 Docker Deployment
 
 ### Using Docker Compose (Recommended)
 ```bash
-# Copy environment variables
-cp server/.env.example .env
-# Edit .env with your configuration
-
-# Build and run
-docker-compose up -d
+cp server/.env.example .env   # then edit .env
+docker compose up -d
 ```
 
 ### Manual Docker Build
@@ -103,35 +112,40 @@ docker build -t multichat .
 docker run -p 8787:8787 --env-file server/.env multichat
 ```
 
+The CI also publishes `ghcr.io/adavid1/streaming-multichat:latest` on every push to `master`.
+
+When deployed behind a reverse proxy (Caddy, Traefik, nginx...), make sure
+WebSocket upgrades are forwarded to the container (Caddy and Traefik do it by default).
+
 ## 🔧 Platform Setup
 
-### Twitch Configuration
-1. **Channel Name**: Your Twitch username
-2. **OAuth Token**: Generate at [Twitch Token Generator](https://twitchtokengenerator.com)
-3. **Client ID**: Create an app at [Twitch Developer Console](https://dev.twitch.tv/console)
+### Twitch
+1. **Channel name**: your Twitch login (chat is read anonymously)
+2. **Optional - custom badges**: create an app in the
+   [Twitch Developer Console](https://dev.twitch.tv/console) and set
+   `TWITCH_CLIENT_ID` + `TWITCH_CLIENT_SECRET` to display your channel's
+   subscriber/bits badges. The app token is renewed automatically.
 
-### YouTube Configuration
-1. **Channel ID**: Find your channel ID in YouTube Studio
-   - Go to YouTube Studio → Settings → Channel → Advanced settings
-   - Or use online tools to convert your channel handle to ID
+### YouTube
+1. **Channel ID** (starts with `UC`): https://www.youtube.com/account_advanced
+2. No API key and no quota: the public live chat is read like a browser does.
 
-### TikTok Configuration
-1. **Username**: Your TikTok @username (without the @)
-2. **Note**: TikTok integration uses reverse-engineering and may be less stable
+### TikTok
+1. **Username**: your TikTok @username (without the @)
+2. TikTok uses a third-party signing service ([Euler Stream](https://www.eulerstream.com)).
+   The free tier is enough for one channel; set `TIKTOK_SIGN_API_KEY` if you hit rate limits.
 
 ## 🎬 OBS Integration
 
-### Adding Chat Overlay
-1. Add **Browser Source** in OBS
-2. Set URL to: `http://localhost:8787/?mode=public`
-3. Set dimensions: 400x800 (or adjust to your needs)
-4. Enable **Shutdown source when not visible** for better performance
+### Chat overlay (scene)
+1. Add a **Browser Source** with URL `https://your-domain/` (or `http://localhost:8787/`)
+2. Set dimensions: 400x800 (or adjust to your needs)
+3. Transparent background, messages fade out after 60 seconds
 
-### Public Mode Features
-- Clean, transparent background
-- Auto-expiring messages (60 seconds)
-- No controls or settings visible
-- Optimized for streaming overlay
+### Streamer dock
+1. OBS → **Docks → Custom Browser Docks**
+2. URL: `https://your-domain/private`
+3. Shows all messages with timestamps, platform icons, statuses and filters
 
 ## 📁 Project Structure
 
@@ -141,56 +155,41 @@ multichat/
 │   ├── src/
 │   │   ├── components/     # React components
 │   │   ├── contexts/       # React contexts (badges, emotes)
-│   │   ├── hooks/          # Custom React hooks
+│   │   ├── hooks/          # WebSocket + chat state hooks
 │   │   └── utils/          # Utility functions
 │   └── public/             # Static assets (emote/badge data)
 ├── server/                 # Node.js backend
 │   └── src/
-│       ├── adapters/       # Platform-specific chat adapters
-│       │   ├── twitch.ts   # Twitch IRC integration
-│       │   ├── youtube.ts  # YouTube Live Chat integration
-│       │   └── tiktok.ts   # TikTok Live integration
-│       ├── twitch-api.ts   # Twitch Helix API integration
-│       └── index.ts        # Main server file
+│       ├── adapters/       # Platform connectors
+│       │   ├── connector.ts# Common connector interface
+│       │   ├── twitch.ts   # Twitch IRC (tmi.js)
+│       │   ├── youtube.ts  # YouTube live chat (youtubei.js)
+│       │   └── tiktok.ts   # TikTok Live (tiktok-live-connector)
+│       ├── twitch-api.ts   # Twitch Helix API (badges)
+│       └── index.ts        # HTTP + WebSocket server
 ├── shared/                 # Shared TypeScript types
-└── Dockerfile             # Multi-stage Docker build
+└── Dockerfile              # Multi-stage Docker build
 ```
 
 ## 🔌 API Endpoints
 
-### Status
-- `GET /api/status` - Get all platform statuses
 - `GET /health` - Health check
+- `GET /api/status` - Status of every platform connector
+- `POST /api/:platform/refresh` - Force a live check / reconnection (`twitch`, `youtube`, `tiktok`)
 
-### Platform Controls
-- `POST /api/youtube/start` - Start YouTube chat monitoring
-- `POST /api/tiktok/start` - Start TikTok chat monitoring
-- `GET /api/badges/:channel` - Get Twitch channel badges
-
-### WebSocket Events
+### WebSocket messages
 - `chat` - New chat message
-- `connection` - Connection status
-- `badges` - Badge data update
-- `youtube-status` - YouTube status change
-- `twitch-status` - Twitch status change  
-- `tiktok-status` - TikTok status change
+- `history` - Recent messages, sent on connection
+- `status` - Status of all platforms
+- `badges` - Twitch badge data
+- `ping` - Heartbeat (every 25 s)
 
 ## 🛠️ Development
 
-### Running Tests
 ```bash
-npm run dev:test
-```
-
-### Building Individual Components
-```bash
+npm run build:shared     # Build shared types
 npm run build:client     # Build React app
 npm run build:server     # Build Node.js server
-npm run build:shared     # Build shared types
-```
-
-### Linting
-```bash
 cd client && npm run lint
 cd server && npm run lint
 ```
@@ -200,12 +199,11 @@ cd server && npm run lint
 | Feature | Twitch | YouTube | TikTok |
 |---------|--------|---------|--------|
 | Real-time Chat | ✅ | ✅ | ✅ |
-| User Badges | ✅ | ✅ | ✅ |
+| User Badges | ✅ | ✅ (text) | ❌ |
 | Emotes/Emojis | ✅ | ✅ | ❌ |
 | Subscriber Info | ✅ | ❌ | ❌ |
-| Gift/Donation Alerts | ❌ | ❌ | ✅ |
-| Auto-Start | ✅ | Manual | Manual |
-| Connection Status | ✅ | ✅ | ✅ |
+| Super Chat / Gifts | ❌ | ✅ | ✅ |
+| Automatic live detection | ✅ | ✅ | ✅ |
 
 ## 🔐 Environment Variables
 
@@ -213,38 +211,30 @@ cd server && npm run lint
 |----------|----------|-------------|
 | `PORT` | No | Server port (default: 8787) |
 | `TWITCH_CHANNEL` | Yes* | Twitch channel name |
-| `TWITCH_OAUTH` | No | OAuth token for enhanced features |
-| `TWITCH_CLIENT_ID` | No | Client ID for API access |
-| `YT_CHANNEL_ID` | Yes* | YouTube channel ID |
+| `TWITCH_CLIENT_ID` | No | Twitch app client ID (custom badges) |
+| `TWITCH_CLIENT_SECRET` | No | Twitch app secret (custom badges, recommended) |
+| `TWITCH_OAUTH` | No | Legacy user token, alternative to the secret |
+| `YT_CHANNEL_ID` | Yes* | YouTube channel ID (`UC...`) |
+| `YT_POLL_INTERVAL_SECONDS` | No | Live check interval (default: 20) |
 | `TIKTOK_USERNAME` | Yes* | TikTok username |
+| `TIKTOK_POLL_INTERVAL_SECONDS` | No | Live check interval (default: 30, min 30) |
+| `TIKTOK_SIGN_API_KEY` | No | Euler Stream API key (higher rate limits) |
 
 *At least one platform must be configured
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+**A platform stays on "Waiting for live" while you are live**
+- Check the ID/username in the tooltip of the platform badge in the dock
+- YouTube: the live must be public (unlisted/private lives are not found via `/live`)
+- Click the badge to force a check, and look at the server logs (`[youtube]`, `[tiktok]`)
 
-**Twitch not connecting**
-- Verify `TWITCH_CHANNEL` matches your exact username
-- Ensure OAuth token is valid and has chat:read scope
+**TikTok "rate limit" error**
+- The free signing tier was exceeded: wait 2 minutes or set `TIKTOK_SIGN_API_KEY`
 
-**YouTube not finding stream**
-- Verify `YT_CHANNEL_ID` is correct (not channel handle)
-- Make sure you have an active live stream
-- Try stopping and restarting YouTube monitoring
+**The overlay shows nothing**
+- Open the `/private` URL in a browser: the header shows the server connection and each platform status
 
-**TikTok connection fails**
-- Verify `TIKTOK_USERNAME` is exact (without @)
-- TikTok integration may be unstable due to platform changes
-- Check if user is currently live
-
-**Docker build fails**
-- Ensure you have enough disk space
-- Try `docker system prune` to clean up
-- Verify all environment variables are set
-
-### Debug Mode
-Set `NODE_ENV=development` for verbose logging.
 
 ## 🤝 Contributing
 
@@ -261,7 +251,7 @@ This project is licensed under the MIT License.
 ## 🙏 Acknowledgments
 
 - [tmi.js](https://github.com/tmijs/tmi.js) - Twitch IRC integration
-- [youtube-chat](https://github.com/LinaTsukusu/youtube-chat) - YouTube Live Chat
+- [youtubei.js](https://github.com/LuanRT/YouTube.js) - YouTube Live Chat
 - [tiktok-live-connector](https://github.com/zerodytrash/TikTok-Live-Connector) - TikTok Live integration
 - [React](https://reactjs.org/) - UI framework
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
