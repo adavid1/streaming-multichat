@@ -4,7 +4,9 @@ import type { CustomEmoji, YouTubeConfig } from '../../../shared/types.js'
 import {
   type Connector,
   type ConnectorOptions,
+  backoff,
   createDedupe,
+  createPoller,
   createStatusHolder,
   errorMessage,
 } from './connector.js'
@@ -23,6 +25,9 @@ interface YouTubeConnectorOptions extends ConnectorOptions, YouTubeConfig {
 /** While connected, re-check /live periodically to follow a new broadcast. */
 const WATCHDOG_INTERVAL_MS = 120_000
 const MAX_BACKOFF_MS = 5 * 60_000
+/** A chat that ends this soon after connecting is considered unavailable (disabled, restricted...). */
+const QUICK_END_MS = 90_000
+const MAX_UNAVAILABLE_BACKOFF_MS = 10 * 60_000
 
 export function createYouTubeConnector({
   channelId,
@@ -36,20 +41,9 @@ export function createYouTubeConnector({
   let client: Innertube | null = null
   let chat: LiveChat | null = null
   let videoId: string | null = null
-  let timer: NodeJS.Timeout | null = null
-  let running = false
-  let checking = false
   let failures = 0
-
-  const clearTimer = () => {
-    if (timer) clearTimeout(timer)
-    timer = null
-  }
-
-  const schedule = (ms: number) => {
-    clearTimer()
-    if (running) timer = setTimeout(() => void check(), ms)
-  }
+  /** Consecutive chats that ended right after connecting */
+  let quickEnds = 0
 
   const getClient = async (): Promise<Innertube> => {
     if (!client) {
@@ -85,9 +79,34 @@ export function createYouTubeConnector({
     }
   }
 
+  const check = async (): Promise<number> => {
+    try {
+      const live = await findLive()
+      failures = 0
+      if (live && (live.id !== videoId || !chat)) {
+        connectChat(live.id, live.info)
+      } else if (!live && !chat) {
+        status.set('waiting', 'Waiting for the stream to go live')
+      }
+      return chat ? WATCHDOG_INTERVAL_MS : pollIntervalMs
+    } catch (error) {
+      failures++
+      client = null // start from a fresh session next time
+      if (chat) {
+        console.warn('[youtube] watchdog check failed:', errorMessage(error))
+        return WATCHDOG_INTERVAL_MS
+      }
+      status.set('error', `Live check failed (${errorMessage(error)}), retrying automatically`)
+      return backoff(pollIntervalMs, failures, MAX_BACKOFF_MS)
+    }
+  }
+
+  const poller = createPoller(check)
+
   const connectChat = (id: string, info: YT.VideoInfo) => {
     disconnectChat()
     const title = info.basic_info.title ?? id
+    const connectedAt = Date.now()
     status.set('connecting', `Live found: ${title}`, id)
 
     const liveChat = info.getLiveChat()
@@ -116,9 +135,22 @@ export function createYouTubeConnector({
     liveChat.on('end', () => {
       if (chat !== liveChat) return
       disconnectChat()
-      status.set('waiting', 'Stream ended - waiting for the next live')
-      // Check again soon: if the stream was just restarted, reconnect quickly
-      schedule(5_000)
+      quickEnds = Date.now() - connectedAt < QUICK_END_MS ? quickEnds + 1 : 0
+
+      if (quickEnds > 0) {
+        // The live is still there but its chat can't be read: back off instead of looping
+        const delay = backoff(60_000, quickEnds - 1, MAX_UNAVAILABLE_BACKOFF_MS)
+        status.set(
+          'error',
+          `Live chat unavailable (disabled or restricted?), retrying in ${Math.round(delay / 1000)}s`,
+          id,
+        )
+        poller.schedule(delay)
+      } else {
+        status.set('waiting', 'Stream ended - waiting for the next live')
+        // Check again soon: if the stream was just restarted, reconnect quickly
+        poller.schedule(5_000)
+      }
     })
 
     liveChat.start()
@@ -168,49 +200,23 @@ export function createYouTubeConnector({
     })
   }
 
-  const check = async () => {
-    if (!running || checking) return
-    checking = true
-    clearTimer()
-    try {
-      const live = await findLive()
-      failures = 0
-      if (live && (live.id !== videoId || !chat)) {
-        connectChat(live.id, live.info)
-      } else if (!live && !chat) {
-        status.set('waiting', 'Waiting for the stream to go live')
-      }
-    } catch (error) {
-      failures++
-      client = null // start from a fresh session next time
-      if (!chat) status.set('error', `Live check failed (${errorMessage(error)}), retrying automatically`)
-      else console.warn('[youtube] watchdog check failed:', errorMessage(error))
-    } finally {
-      checking = false
-      const backoff = Math.min(pollIntervalMs * 2 ** Math.min(failures, 4), MAX_BACKOFF_MS)
-      schedule(chat ? WATCHDOG_INTERVAL_MS : failures ? backoff : pollIntervalMs)
-    }
-  }
-
   return {
     start() {
-      if (running) return
-      running = true
       status.set('waiting', 'Checking whether the channel is live...')
-      void check()
+      poller.start()
     },
     async stop() {
-      running = false
-      clearTimer()
+      poller.stop()
       disconnectChat()
     },
     async refresh() {
-      if (!running || checking) return
-      // Manual reconnect: drop the current chat and check from scratch
+      // Manual reconnect: drop the current chat and check from scratch.
+      // If a check is already running, the poller runs another one right after.
       disconnectChat()
       failures = 0
+      quickEnds = 0
       status.set('waiting', 'Manual refresh: checking whether the channel is live...')
-      await check()
+      await poller.trigger()
     },
     getStatus: status.get,
   }

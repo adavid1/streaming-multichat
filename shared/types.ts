@@ -51,7 +51,7 @@ export type PlatformStatuses = Record<Platform, PlatformStatus>;
 
 export type WebSocketMessage =
   | { type: 'chat'; data: ChatMessage }
-  | { type: 'history'; data: ChatMessage[] }
+  | { type: 'history'; data: ChatMessage[]; serverTime: number }
   | { type: 'status'; data: PlatformStatuses }
   | { type: 'badges'; data: TwitchBadgeResponse }
   | { type: 'connection'; message: string }

@@ -60,14 +60,14 @@ export function createTwitchConnector({
 
   let running = false
 
+  // tmi.js reconnects by itself (reconnect: true, unlimited attempts), even when
+  // the very first connection fails: never call connect() while it is
+  // reconnecting, or a second socket is opened and every message is duplicated.
   const connect = async () => {
     try {
       await client.connect()
     } catch (error) {
-      // tmi.js keeps reconnecting by itself after the first successful connection;
-      // if the very first attempt fails we retry ourselves.
       status.set('error', `Twitch IRC connection failed (${errorMessage(error)}), retrying...`)
-      if (running && client.readyState() !== 'OPEN') setTimeout(() => void connect(), 15_000)
     }
   }
 
@@ -86,7 +86,8 @@ export function createTwitchConnector({
       }
     },
     async refresh() {
-      if (client.readyState() === 'OPEN') return
+      // Only act when the client is really idle: closed, with no reconnect pending
+      if (!running || client.readyState() !== 'CLOSED' || client.reconnecting) return
       await connect()
     },
     getStatus: status.get,

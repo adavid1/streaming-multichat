@@ -49,6 +49,8 @@ async function helix<T>(path: string, credentials: Credentials): Promise<T[]> {
   const response = await fetch(`https://api.twitch.tv/helix/${path}`, {
     headers: { 'Client-ID': credentials.clientId, Authorization: `Bearer ${credentials.token}` },
   })
+  // Revoked / rotated token: forget it so the next call requests a new one
+  if (response.status === 401) appToken = null
   if (!response.ok) throw new Error(`Twitch API ${path} failed: HTTP ${response.status}`)
   const json = (await response.json()) as { data?: T[] }
   return json.data ?? []
@@ -82,11 +84,19 @@ export async function getTwitchBadges(channel: string): Promise<TwitchBadgeRespo
     return null
   }
 
-  const [user] = await helix<{ id: string }>(`users?login=${encodeURIComponent(channel.toLowerCase())}`, credentials)
   const globalBadges = await helix<HelixBadge>('chat/badges/global', credentials)
-  const channelBadges = user
-    ? await helix<HelixBadge>(`chat/badges?broadcaster_id=${user.id}`, credentials)
-    : []
+
+  // Channel badges are a bonus: if they fail, keep the global ones
+  let channelBadges: HelixBadge[] = []
+  try {
+    const [user] = await helix<{ id: string }>(
+      `users?login=${encodeURIComponent(channel.toLowerCase())}`,
+      credentials,
+    )
+    if (user) channelBadges = await helix<HelixBadge>(`chat/badges?broadcaster_id=${user.id}`, credentials)
+  } catch (error) {
+    console.warn('[twitch-api] Channel badges unavailable:', (error as Error).message)
+  }
 
   // Channel badges take priority over global ones
   return { badge_sets: { ...toBadgeSets(globalBadges), ...toBadgeSets(channelBadges) } }

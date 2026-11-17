@@ -8,7 +8,7 @@ const FADE_MS = 320
 interface UseChatMessagesReturn {
   messages: ChatMessage[]
   addMessage: (message: ChatMessage) => void
-  addHistory: (messages: ChatMessage[]) => void
+  addHistory: (messages: ChatMessage[], serverTime: number) => void
   clearMessages: () => void
   expiringIds: Set<string>
 }
@@ -38,12 +38,15 @@ export const useChatMessages = ({
     setMessages((prev) => merge(prev, [{ ...message, ts: Date.now() }]))
   }, [])
 
-  // History is sent by the server on (re)connection: dedupe by id and skip
-  // messages that would already have expired in the overlay
+  // History is sent by the server on (re)connection. Timestamps are shifted to
+  // the local clock (like live messages), then deduped by id; messages that
+  // would already have expired in the overlay are skipped.
   const addHistory = useCallback(
-    (history: ChatMessage[]) => {
+    (history: ChatMessage[], serverTime: number) => {
       const now = Date.now()
-      const kept = autoExpire ? history.filter((m) => now - m.ts < EXPIRY_MS - 5_000) : history
+      const offset = Number.isFinite(serverTime) ? now - serverTime : 0
+      const local = history.map((m) => ({ ...m, ts: m.ts + offset }))
+      const kept = autoExpire ? local.filter((m) => now - m.ts < EXPIRY_MS - 5_000) : local
       setMessages((prev) => merge(prev, kept))
     },
     [autoExpire]

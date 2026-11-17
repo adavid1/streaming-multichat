@@ -9,7 +9,9 @@ import type { TikTokConfig } from '../../../shared/types.js'
 import {
   type Connector,
   type ConnectorOptions,
+  backoff,
   createDedupe,
+  createPoller,
   createStatusHolder,
   errorMessage,
 } from './connector.js'
@@ -38,8 +40,6 @@ interface TikTokGiftEvent {
   user?: TikTokUser
   repeatCount?: number
   repeatEnd?: number | boolean
-  groupId?: string
-  giftId?: string | number
   gift?: { name?: string; type?: number; diamondCount?: number }
   giftDetails?: { giftName?: string; giftType?: number }
 }
@@ -47,7 +47,7 @@ interface TikTokGiftEvent {
 const MAX_BACKOFF_MS = 5 * 60_000
 const RATE_LIMIT_BACKOFF_MS = 2 * 60_000
 const MAX_MESSAGE_AGE_MS = 2 * 60_000
-/** If fetchIsLive keeps failing, try a real connect every N checks as a fallback. */
+/** If the live probe keeps failing, try a real connect every N checks as a fallback. */
 const CONNECT_FALLBACK_EVERY = 3
 
 const userName = (user?: TikTokUser) =>
@@ -69,20 +69,9 @@ export function createTikTokConnector({
   const probe = new TikTokLiveConnection(uniqueId, options)
 
   let conn: TikTokLiveConnection | null = null
-  let timer: NodeJS.Timeout | null = null
-  let running = false
-  let checking = false
   let failures = 0
-
-  const clearTimer = () => {
-    if (timer) clearTimeout(timer)
-    timer = null
-  }
-
-  const schedule = (ms: number) => {
-    clearTimer()
-    if (running) timer = setTimeout(() => void check(), ms)
-  }
+  let unknownChecks = 0
+  let forceConnect = false
 
   const disconnect = async () => {
     const current = conn
@@ -131,7 +120,8 @@ export function createTikTokConnector({
     })
   }
 
-  const connect = async (): Promise<boolean> => {
+  /** Connects to the live. Throws UserOfflineError when the user is not live. */
+  const connect = async (): Promise<void> => {
     await disconnect()
     status.set('connecting', `Connecting to @${uniqueId}'s live...`)
 
@@ -158,7 +148,7 @@ export function createTikTokConnector({
       if (conn !== connection) return
       void disconnect()
       status.set('waiting', 'Stream ended - waiting for the next live')
-      schedule(pollIntervalMs)
+      poller.schedule(pollIntervalMs)
     })
 
     connection.on(ControlEvent.DISCONNECTED, ({ code, reason }) => {
@@ -167,7 +157,7 @@ export function createTikTokConnector({
       connection.removeAllListeners()
       // Connection dropped (network, TikTok...): check again quickly
       status.set('waiting', `Disconnected (${code}${reason ? ` ${reason}` : ''}), checking again...`)
-      schedule(5_000)
+      poller.schedule(5_000)
     })
 
     connection.on(ControlEvent.ERROR, (error) => {
@@ -176,9 +166,9 @@ export function createTikTokConnector({
 
     try {
       const state = await connection.connect()
-      if (conn !== connection) return false
-      status.set('connected', `Connected to @${uniqueId}'s live`, String(state.roomId ?? ''))
-      return true
+      if (conn === connection) {
+        status.set('connected', `Connected to @${uniqueId}'s live`, String(state.roomId ?? ''))
+      }
     } catch (error) {
       if (conn === connection) {
         conn = null
@@ -188,81 +178,76 @@ export function createTikTokConnector({
     }
   }
 
-  const check = async () => {
-    if (!running || checking || conn) return
-    checking = true
-    clearTimer()
-    let nextDelay = pollIntervalMs
-    try {
-      let live: boolean | null = null
+  const check = async (): Promise<number | null> => {
+    if (conn && !forceConnect) return null // connected: events drive the next step
+
+    let live: boolean | null = null
+    if (!forceConnect) {
       try {
         live = await probe.fetchIsLive()
       } catch (error) {
         console.warn('[tiktok] live check failed:', errorMessage(error))
       }
+    }
 
-      const tryConnect = live === true || (live === null && (failures + 1) % CONNECT_FALLBACK_EVERY === 0)
+    const tryConnect =
+      forceConnect || live === true || (live === null && (unknownChecks + 1) % CONNECT_FALLBACK_EVERY === 0)
+    forceConnect = false
+
+    try {
       if (tryConnect) {
         await connect()
         failures = 0
-        return
+        unknownChecks = 0
+        return conn ? null : pollIntervalMs
       }
-
       if (live === false) {
         failures = 0
+        unknownChecks = 0
         status.set('waiting', `Waiting for @${uniqueId} to go live`)
       } else {
-        failures++
+        unknownChecks++
         status.set('waiting', `Could not check @${uniqueId}'s live status, retrying...`)
       }
+      return pollIntervalMs
     } catch (error) {
       if (error instanceof UserOfflineError) {
         failures = 0
         status.set('waiting', `Waiting for @${uniqueId} to go live`)
-      } else if (error instanceof SignatureRateLimitError) {
-        failures++
-        nextDelay = RATE_LIMIT_BACKOFF_MS
-        status.set('error', 'TikTok signing rate limit reached, retrying in 2 min (set TIKTOK_SIGN_API_KEY to raise it)')
-      } else {
-        failures++
-        nextDelay = Math.min(pollIntervalMs * 2 ** Math.min(failures, 3), MAX_BACKOFF_MS)
-        status.set('error', `Connection failed (${errorMessage(error)}), retrying automatically`)
+        return pollIntervalMs
       }
-    } finally {
-      checking = false
-      if (!conn) schedule(nextDelay)
+      failures++
+      if (error instanceof SignatureRateLimitError) {
+        status.set(
+          'error',
+          'TikTok signing rate limit reached, retrying in 2 min (set TIKTOK_SIGN_API_KEY to raise it)',
+        )
+        return RATE_LIMIT_BACKOFF_MS
+      }
+      status.set('error', `Connection failed (${errorMessage(error)}), retrying automatically`)
+      return backoff(pollIntervalMs, failures, MAX_BACKOFF_MS)
     }
   }
 
+  const poller = createPoller(check)
+
   return {
     start() {
-      if (running) return
-      running = true
       status.set('waiting', `Checking whether @${uniqueId} is live...`)
-      void check()
+      poller.start()
     },
     async stop() {
-      running = false
-      clearTimer()
+      poller.stop()
       await disconnect()
     },
     async refresh() {
-      if (!running || checking) return
+      // Manual action: skip the live probe and try to connect directly.
+      // If a check is already running, the poller runs another one right after.
       await disconnect()
       failures = 0
-      status.set('waiting', 'Manual refresh: checking whether the user is live...')
-      clearTimer()
-      checking = true
-      try {
-        // Manual action: skip the live probe and try to connect directly
-        await connect()
-      } catch (error) {
-        const msg = error instanceof UserOfflineError ? `@${uniqueId} is not live` : errorMessage(error)
-        status.set(error instanceof UserOfflineError ? 'waiting' : 'error', msg)
-      } finally {
-        checking = false
-        if (!conn) schedule(pollIntervalMs)
-      }
+      forceConnect = true
+      status.set('waiting', 'Manual refresh: connecting...')
+      await poller.trigger()
     },
     getStatus: status.get,
   }

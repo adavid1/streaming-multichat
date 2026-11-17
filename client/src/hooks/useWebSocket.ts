@@ -10,7 +10,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'er
 
 interface UseWebSocketOptions {
   onChat: (message: ChatMessage) => void
-  onHistory?: (messages: ChatMessage[]) => void
+  onHistory?: (messages: ChatMessage[], serverTime: number) => void
 }
 
 interface UseWebSocketReturn {
@@ -62,7 +62,14 @@ export const useWebSocket = ({ onChat, onHistory }: UseWebSocketOptions): UseWeb
       window.clearTimeout(staleTimer)
       staleTimer = window.setTimeout(() => {
         console.warn('[ws] no data from server for a while, reconnecting')
+        // On a dead TCP connection, close() may wait minutes for the closing
+        // handshake before firing onclose: detach the socket and reconnect now.
+        if (ws !== socket) return
+        ws = null
+        socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null
         socket.close()
+        setConnectionStatus('disconnected')
+        scheduleReconnect()
       }, STALE_CONNECTION_MS)
     }
 
@@ -72,7 +79,7 @@ export const useWebSocket = ({ onChat, onHistory }: UseWebSocketOptions): UseWeb
           handlersRef.current.onChat(msg.data)
           break
         case 'history':
-          handlersRef.current.onHistory?.(msg.data)
+          handlersRef.current.onHistory?.(msg.data, msg.serverTime)
           break
         case 'status':
           setStatuses(msg.data)

@@ -55,6 +55,73 @@ export function createDedupe(max = 2000) {
   }
 }
 
+/** Exponential backoff: base * 2^failures, capped. */
+export function backoff(baseMs: number, failures: number, maxMs: number): number {
+  return Math.min(baseMs * 2 ** Math.min(failures, 10), maxMs)
+}
+
+/**
+ * Runs `check` in a loop. `check` returns the delay before the next run, or
+ * null to stop scheduling (e.g. while connected, events take over and call
+ * `schedule()` again). A `trigger()` during a run is not lost: the check runs
+ * again right after the current one.
+ */
+export function createPoller(check: () => Promise<number | null>) {
+  let timer: NodeJS.Timeout | null = null
+  let running = false
+  let busy = false
+  let again = false
+
+  const clear = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+  }
+
+  const schedule = (ms: number) => {
+    clear()
+    if (running) timer = setTimeout(() => void trigger(), ms)
+  }
+
+  const trigger = async (): Promise<void> => {
+    if (!running) return
+    if (busy) {
+      again = true
+      return
+    }
+    busy = true
+    clear()
+    let next: number | null = null
+    try {
+      next = await check()
+    } catch (error) {
+      console.error('[poller] unexpected error:', errorMessage(error))
+      next = 60_000
+    } finally {
+      busy = false
+    }
+    if (again) {
+      again = false
+      return trigger()
+    }
+    if (next !== null) schedule(next)
+  }
+
+  return {
+    start() {
+      if (running) return
+      running = true
+      void trigger()
+    },
+    stop() {
+      running = false
+      again = false
+      clear()
+    },
+    trigger,
+    schedule,
+  }
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error

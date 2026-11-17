@@ -147,7 +147,7 @@ wss.on('connection', (ws) => {
   send(ws, { type: 'connection', message: 'Connected to multichat server' })
   send(ws, { type: 'status', data: getStatuses() })
   if (twitchBadges) send(ws, { type: 'badges', data: twitchBadges })
-  if (history.length) send(ws, { type: 'history', data: history })
+  if (history.length) send(ws, { type: 'history', data: history, serverTime: Date.now() })
 })
 
 // Heartbeat: application-level ping keeps proxies from closing idle sockets and
@@ -188,6 +188,12 @@ function pushMessage(platform: Platform, evt: AdapterEvent): void {
 
 const onStatusChange = () => broadcast({ type: 'status', data: getStatuses() })
 
+/** Parses an interval in seconds, falling back to the default on invalid values. */
+function intervalSeconds(value: string | undefined, fallback: number, min: number): number {
+  const parsed = parseInt(value ?? '', 10)
+  return Math.max(min, Number.isFinite(parsed) ? parsed : fallback)
+}
+
 function initConnectors(): void {
   const env = process.env
 
@@ -204,7 +210,7 @@ function initConnectors(): void {
   if (env.YT_CHANNEL_ID) {
     connectors.youtube = createYouTubeConnector({
       channelId: env.YT_CHANNEL_ID,
-      pollIntervalMs: parseInt(env.YT_POLL_INTERVAL_SECONDS || '20', 10) * 1000,
+      pollIntervalMs: intervalSeconds(env.YT_POLL_INTERVAL_SECONDS, 20, 10) * 1000,
       onMessage: (evt) => pushMessage('youtube', evt),
       onStatusChange,
     })
@@ -215,7 +221,7 @@ function initConnectors(): void {
   if (env.TIKTOK_USERNAME) {
     connectors.tiktok = createTikTokConnector({
       username: env.TIKTOK_USERNAME,
-      pollIntervalMs: Math.max(30, parseInt(env.TIKTOK_POLL_INTERVAL_SECONDS || '30', 10)) * 1000,
+      pollIntervalMs: intervalSeconds(env.TIKTOK_POLL_INTERVAL_SECONDS, 30, 30) * 1000,
       signApiKey: env.TIKTOK_SIGN_API_KEY || undefined,
       onMessage: (evt) => pushMessage('tiktok', evt),
       onStatusChange,
@@ -227,8 +233,14 @@ function initConnectors(): void {
   for (const platform of PLATFORMS) connectors[platform]?.start()
 }
 
+const BADGES_REFRESH_MS = 24 * 3600_000
+const BADGES_RETRY_MS = 5 * 60_000
+let badgesTimer: NodeJS.Timeout | null = null
+
+/** Loads Twitch badges, then refreshes them daily (retries every 5 min on failure). */
 async function loadTwitchBadges(): Promise<void> {
   if (!process.env.TWITCH_CHANNEL) return
+  let next = BADGES_REFRESH_MS
   try {
     const badges = await getTwitchBadges(process.env.TWITCH_CHANNEL)
     if (badges) {
@@ -237,8 +249,11 @@ async function loadTwitchBadges(): Promise<void> {
       broadcast({ type: 'badges', data: badges })
     }
   } catch (error) {
-    console.error('[badges] Failed to load Twitch badges:', errorMessage(error))
+    console.error('[badges] Failed to load Twitch badges, retrying in 5 min:', errorMessage(error))
+    next = BADGES_RETRY_MS
   }
+  badgesTimer = setTimeout(() => void loadTwitchBadges(), next)
+  badgesTimer.unref()
 }
 
 server.on('error', (error) => {
@@ -255,8 +270,6 @@ server.listen(PORT, HOST, () => {
   }
   initConnectors()
   void loadTwitchBadges()
-  // Refresh badges daily (new sub badges, expired tokens...)
-  setInterval(() => void loadTwitchBadges(), 24 * 3600_000).unref()
 })
 
 // ---------------------------------------------------------------------------
@@ -269,6 +282,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true
   console.log(`\n[server] ${signal} received, shutting down...`)
   clearInterval(heartbeat)
+  if (badgesTimer) clearTimeout(badgesTimer)
   const force = setTimeout(() => process.exit(0), 5_000)
   force.unref()
   await Promise.allSettled(PLATFORMS.map((p) => connectors[p]?.stop()))
